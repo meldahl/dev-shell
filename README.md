@@ -8,10 +8,10 @@ inside WSL or Linux.
 ❯ dev <Tab>
 
 PROJECT        │ BRANCH
-apollo         │ on main
-hermesAI       │ on add_jwt_token_auth
-jarvis         │ on feat/action-builder
-random         │ no git repo
+api            │ on main
+website        │ on feat/dark-mode
+cli            │ on fix/flaky-tests
+notes          │ no git repo
 ```
 
 ## What it gives you
@@ -31,15 +31,16 @@ next column), and history drives **inline suggestions**.
 
 ## Install
 
-Clone anywhere, then run the installer for whichever shell you use. Both back up
-your config first and are safe to re-run.
+Clone anywhere, then run the installer for whichever shell you use. It asks
+where your projects live — Enter keeps the default, `~/dev` — and writes a small
+block into your shell config, backing the file up first.
 
 **zsh**
 
 ```sh
 git clone https://github.com/YOUR-NAME/dev-shell.git ~/dev/dev-shell
 cd ~/dev/dev-shell
-DEV_ROOT=~/dev ./install.sh
+./install.sh
 ```
 
 **PowerShell**
@@ -47,21 +48,38 @@ DEV_ROOT=~/dev ./install.sh
 ```powershell
 git clone https://github.com/YOUR-NAME/dev-shell.git $HOME\dev\dev-shell
 cd $HOME\dev\dev-shell
-./install.ps1 -DevRoot $HOME\dev
+./install.ps1
 ```
 
-If your projects live inside WSL but you drive them from Windows, point `-Code`
-at the WSL remote so the editor runs inside Linux rather than tunnelling over
-the filesystem bridge:
+On Windows with WSL installed, the PowerShell installer also asks which distro
+and which path inside it `-Code` should open (Enter skips). With both set, the
+editor runs inside Linux through the VS Code WSL remote rather than tunnelling
+over the filesystem bridge.
+
+**Changing the paths later.** Re-run the installer: each question defaults to
+your current setting, and the block is replaced in place, never duplicated. Or
+edit the block by hand — [Uninstall](#uninstall) says where it lives.
+
+**Scripted installs.** Without a terminal to ask on (`curl | bash`, CI, a
+dotfiles bootstrap) the installers refuse to guess and exit with a message —
+pass the path instead. A flag or parameter is never asked for:
+
+```sh
+./install.sh --dev-root ~/code
+```
 
 ```powershell
-./install.ps1 -DevRoot $HOME\dev -WslDistro Ubuntu -WslRoot /home/you/dev
+./install.ps1 -DevRoot C:\code -WslDistro Ubuntu -WslRoot /home/you/dev
 ```
+
+`DEV_ROOT` in the environment also works for the zsh installer: scripts use it
+as the answer, and when the installer can ask, it is the default on offer.
 
 ## Configuration
 
-Set these **before** the module is sourced (the installer writes them into the
-block it adds).
+The installer writes these into the block it adds, from your answers or its
+arguments; re-run it to change them, or set them by hand **before** the module
+is sourced.
 
 | zsh | PowerShell | Meaning |
 |---|---|---|
