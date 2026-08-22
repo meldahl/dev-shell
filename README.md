@@ -38,7 +38,7 @@ block into your shell config, backing the file up first.
 **zsh**
 
 ```sh
-git clone https://github.com/YOUR-NAME/dev-shell.git ~/dev/dev-shell
+git clone https://github.com/meldahl/dev-shell.git ~/dev/dev-shell
 cd ~/dev/dev-shell
 ./install.sh
 ```
@@ -46,7 +46,7 @@ cd ~/dev/dev-shell
 **PowerShell**
 
 ```powershell
-git clone https://github.com/YOUR-NAME/dev-shell.git $HOME\dev\dev-shell
+git clone https://github.com/meldahl/dev-shell.git $HOME\dev\dev-shell
 cd $HOME\dev\dev-shell
 ./install.ps1
 ```
