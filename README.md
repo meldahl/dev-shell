@@ -79,6 +79,11 @@ block it adds).
   with zsh or PowerShell.
 - `-c` / `-Code` wherever `code` is on `PATH` (falls back to opening the local
   path when the WSL settings are absent).
+- Branch detection reads `.git/HEAD` directly rather than shelling out, so no
+  `git` binary is required and it stays fast with many projects. It also works
+  where a Windows `git` would refuse outright: inspecting a repo inside WSL
+  fails with *detected dubious ownership* unless you weaken `safe.directory`.
+  Worktrees and submodules (a `.git` file rather than a directory) are followed.
 
 **Needs something extra**
 
