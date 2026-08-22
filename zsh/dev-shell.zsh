@@ -121,10 +121,11 @@ if [[ ${DEV_SHELL_UX:-1} == 1 ]]; then
   zstyle ':completion:*:descriptions' format '%F{81}%B%d%b%f'
 
   # Arrow-navigable menu. 'ma' recolours the selected entry instead of filling
-  # a background box, which would otherwise run into the next column.
+  # a background box, which would otherwise run into the next column. Amber
+  # keeps it clear of the cyan header and the default light-blue text.
   zstyle ':completion:*' menu select
   zmodload -i zsh/complist
-  zstyle ':completion:*' list-colors "${(s.:.)LS_COLORS}" 'ma=1;38;5;81'
+  zstyle ':completion:*' list-colors "${(s.:.)LS_COLORS}" 'ma=1;38;5;214'
 
   # Ghost-text suggestions from history (requires the zsh-autosuggestions
   # plugin; harmless if it is not installed).

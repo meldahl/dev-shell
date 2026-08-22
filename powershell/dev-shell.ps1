@@ -86,7 +86,7 @@ if ($DevShellUx -and (Get-Command Set-PSReadLineKeyHandler -ErrorAction Silently
     # MenuComplete paints the whole column cell (widest item plus padding), so a
     # filled selection box always abuts the next column. Recolour the text
     # instead so the highlight cannot bleed into the neighbouring item.
-    Set-PSReadLineOption -Colors @{ Selection = "`e[1;38;5;81m" }
+    Set-PSReadLineOption -Colors @{ Selection = "`e[1;38;5;214m" }
 
     # Match the prompt chevron instead of the default ">>".
     Set-PSReadLineOption -ContinuationPrompt "❯❯ "
@@ -99,7 +99,7 @@ if ($DevShellUx -and (Get-Command Set-PSReadLineKeyHandler -ErrorAction Silently
         Set-PSReadLineOption -PredictionSource History -PredictionViewStyle ListView -ErrorAction Stop
         Set-PSReadLineOption -Colors @{
             ListPrediction         = "`e[38;5;244m"
-            ListPredictionSelected = "`e[1;38;5;81m"
+            ListPredictionSelected = "`e[1;38;5;214m"
         }
     }
     catch {
