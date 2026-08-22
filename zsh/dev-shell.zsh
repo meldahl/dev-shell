@@ -97,6 +97,8 @@ _dev_branch() {
 # characters inside compadd display strings, and list-colors patterns match the
 # completion VALUE rather than the displayed text -- so the description column
 # cannot be coloured separately. The header and the │ rule carry that job.
+# -l lists one project per row: without it zsh packs the display strings into
+# as many columns as fit, and the header then tops only the first of them.
 _dev_projects() {
   local -a names displays
   local d name branch label hdr=PROJECT
@@ -122,7 +124,7 @@ _dev_projects() {
     displays+=("${(r:$width:)name}  │ $label")
   done
 
-  compadd -Q -X "%F{81}%B${(r:$width:)hdr}  │ BRANCH%b%f" -d displays -a names
+  compadd -Q -l -X "%F{81}%B${(r:$width:)hdr}  │ BRANCH%b%f" -d displays -a names
 }
 
 _dev() {

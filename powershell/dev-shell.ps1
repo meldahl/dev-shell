@@ -1,4 +1,4 @@
-# dev-shell — project navigation and PSReadLine polish for PowerShell.
+﻿# dev-shell — project navigation and PSReadLine polish for PowerShell.
 #
 # Dot-source this from your $PROFILE:
 #     . C:\path\to\dev-shell\powershell\dev-shell.ps1
