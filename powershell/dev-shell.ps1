@@ -59,6 +59,29 @@ function dev {
     Set-Location $target
 }
 
+# Read the current branch straight from .git, without spawning git. Faster on
+# every Tab (no process per project), and it sidesteps git's safe.directory
+# refusal when a Windows git inspects a repo living inside WSL.
+function Get-DevBranch {
+    param([string]$Path)
+
+    $gitdir = Join-Path $Path ".git"
+    if (Test-Path $gitdir -PathType Leaf) {
+        # Worktrees and submodules store "gitdir: <path>" in a file.
+        $line = Get-Content $gitdir -First 1 -ErrorAction SilentlyContinue
+        if ($line -notmatch '^gitdir:\s*(.+)$') { return $null }
+        $gitdir = $Matches[1].Trim()
+        if (-not [System.IO.Path]::IsPathRooted($gitdir)) { $gitdir = Join-Path $Path $gitdir }
+    }
+
+    $head = Join-Path $gitdir "HEAD"
+    if (-not (Test-Path $head)) { return $null }
+
+    $line = Get-Content $head -First 1 -ErrorAction SilentlyContinue
+    if (-not $line) { return $null }
+    if ($line -match '^ref:\s*refs/heads/(.+)$') { return $Matches[1] }
+    return $line.Substring(0, [Math]::Min(7, $line.Length))
+}
 # Complete project names, annotated with the current git branch. The fourth
 # CompletionResult argument is the tooltip, which MenuComplete shows when
 # ShowToolTips is enabled.
@@ -70,7 +93,7 @@ Register-ArgumentCompleter -CommandName dev -ParameterName Project -ScriptBlock 
     Get-ChildItem $DevRoot -Directory -ErrorAction SilentlyContinue |
         Where-Object { $_.Name -like "$wordToComplete*" } |
         ForEach-Object {
-            $branch = & git -C $_.FullName rev-parse --abbrev-ref HEAD 2>$null
+            $branch = Get-DevBranch $_.FullName
             $desc = if ($branch) { "on $branch" } else { "no git repo" }
             [System.Management.Automation.CompletionResult]::new(
                 $_.Name, $_.Name, 'ParameterValue', $desc)

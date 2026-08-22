@@ -71,6 +71,25 @@ dev() {
   cd "$target"
 }
 
+# Read the current branch straight from .git, without spawning git. Faster on
+# every Tab (no process per project), and it sidesteps git's safe.directory
+# refusal when a Windows git inspects a repo living inside WSL.
+_dev_branch() {
+  local dir=$1 gitdir=$1/.git line
+  if [[ -f $gitdir ]]; then
+    # Worktrees and submodules store "gitdir: <path>" in a file.
+    line=$(<$gitdir)
+    gitdir=${line#gitdir: }
+    [[ $gitdir == /* ]] || gitdir=$dir/$gitdir
+  fi
+  [[ -r $gitdir/HEAD ]] || return 1
+  line=$(<$gitdir/HEAD)
+  if [[ $line == "ref: refs/heads/"* ]]; then
+    print -r -- ${line#ref: refs/heads/}
+  else
+    print -r -- ${line[1,7]}
+  fi
+}
 # One row per project, with the current git branch as a description column.
 #
 # _describe would collapse projects that share a branch onto a single row, so
@@ -93,7 +112,7 @@ _dev_projects() {
 
   for d in $DEV_ROOT/*(/N); do
     name=${d:t}
-    branch=$(git -C "$d" rev-parse --abbrev-ref HEAD 2>/dev/null)
+    branch=$(_dev_branch "$d")
     if [[ -n $branch ]]; then
       label="on $branch"
     else
