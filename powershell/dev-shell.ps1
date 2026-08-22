@@ -4,10 +4,12 @@
 #     . C:\path\to\dev-shell\powershell\dev-shell.ps1
 #
 # Optional configuration, set BEFORE dot-sourcing:
-#   $DevRoot      projects directory              (default: $HOME\dev)
-#   $DevWslDistro WSL distro name, e.g. "Ubuntu"  (default: none)
-#   $DevWslRoot   projects path INSIDE that distro, e.g. "/home/you/dev"
-#   $DevShellUx   $false to skip the PSReadLine styling
+#   $DevRoot               projects directory              (default: $HOME\dev)
+#   $DevWslDistro          WSL distro name, e.g. "Ubuntu"  (default: none)
+#   $DevWslRoot            projects path INSIDE that distro, e.g. "/home/you/dev"
+#   $DevShellUx            $false to skip the PSReadLine styling
+#   $DevAccent             256-colour index for the selected item (default: 214)
+#   $DevContinuationPrompt continuation prompt                     (default: "❯❯ ")
 #
 # When $DevWslDistro and $DevWslRoot are both set, -Code opens the project
 # through the VS Code WSL remote so the editor runs inside Linux. Otherwise it
@@ -15,12 +17,14 @@
 
 if (-not $DevRoot)   { $DevRoot = Join-Path $HOME "dev" }
 if ($null -eq $DevShellUx) { $DevShellUx = $true }
+if (-not $DevAccent)       { $DevAccent = 214 }
+if ($null -eq $DevContinuationPrompt) { $DevContinuationPrompt = "❯❯ " }
 
 function dev {
     [CmdletBinding()]
     param(
         [Parameter(Position = 0)][string]$Project,
-        [switch]$Explorer,
+        [Alias('Explorer')][switch]$Open,
         [switch]$Code
     )
 
@@ -35,8 +39,11 @@ function dev {
         return
     }
 
-    if ($Explorer) {
-        Start-Process explorer.exe $target
+    if ($Open) {
+        # Explorer on Windows, Finder on macOS, the preferred handler elsewhere.
+        if ($IsMacOS) { open $target }
+        elseif ($IsLinux) { xdg-open $target }
+        else { Start-Process explorer.exe $target }
         return
     }
 
@@ -102,6 +109,9 @@ Register-ArgumentCompleter -CommandName dev -ParameterName Project -ScriptBlock 
 
 # --- Shell UX ---------------------------------------------------------------
 if ($DevShellUx -and (Get-Command Set-PSReadLineKeyHandler -ErrorAction SilentlyContinue)) {
+    # `e is PowerShell 6+ only; [char]27 reaches Windows PowerShell 5.1 too.
+    $esc = [char]27
+
     # Tab shows a navigable menu rather than cycling through matches silently.
     Set-PSReadLineKeyHandler -Key Tab -Function MenuComplete
     Set-PSReadLineOption -ShowToolTips
@@ -109,14 +119,14 @@ if ($DevShellUx -and (Get-Command Set-PSReadLineKeyHandler -ErrorAction Silently
     # MenuComplete paints the whole column cell (widest item plus padding), so a
     # filled selection box always abuts the next column. Recolour the text
     # instead so the highlight cannot bleed into the neighbouring item.
-    Set-PSReadLineOption -Colors @{ Selection = "`e[1;38;5;214m" }
+    Set-PSReadLineOption -Colors @{ Selection = "${esc}[1;38;5;${DevAccent}m" }
 
     # Match the prompt chevron instead of the default ">>".
-    Set-PSReadLineOption -ContinuationPrompt "❯❯ "
+    Set-PSReadLineOption -ContinuationPrompt $DevContinuationPrompt
 
     # The matched portion of a history suggestion. The default is bright cyan,
     # which reads as unrelated to the amber selection colour.
-    Set-PSReadLineOption -Colors @{ Emphasis = "`e[1;38;5;214m" }
+    Set-PSReadLineOption -Colors @{ Emphasis = "${esc}[1;38;5;${DevAccent}m" }
 
     # A multi-line prompt (oh-my-posh, starship, ...) leaves PSReadLine
     # miscounting where to redraw, so a tall completion menu scrolls and lands
@@ -136,8 +146,8 @@ if ($DevShellUx -and (Get-Command Set-PSReadLineKeyHandler -ErrorAction Silently
     try {
         Set-PSReadLineOption -PredictionSource History -PredictionViewStyle ListView -ErrorAction Stop
         Set-PSReadLineOption -Colors @{
-            ListPrediction         = "`e[38;5;244m"
-            ListPredictionSelected = "`e[1;38;5;214m"
+            ListPrediction         = "${esc}[38;5;244m"
+            ListPredictionSelected = "${esc}[1;38;5;${DevAccent}m"
         }
     }
     catch {

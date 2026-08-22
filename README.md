@@ -22,7 +22,7 @@ notes          │ no git repo
 | `dev myproject` | cd into a project |
 | `dev <Tab>` | menu of projects, annotated with the current git branch |
 | `dev myproject -c` / `-Code` | open in VS Code |
-| `dev myproject -e` / `-Explorer` | open in the file manager |
+| `dev myproject -o` / `-Open` | open in your file manager — Explorer, Finder, or the desktop default (`-e` / `-Explorer` still work) |
 | `dev --help` / `Get-Help dev` | usage |
 
 Plus, in both shells: Tab opens a **visual menu** instead of cycling silently,
@@ -56,24 +56,37 @@ and which path inside it `-Code` should open (Enter skips). With both set, the
 editor runs inside Linux through the VS Code WSL remote rather than tunnelling
 over the filesystem bridge.
 
+Then it shows a **preview** of the look on a few sample projects — the menu
+header, the accent-coloured selected item, a ghost-text suggestion, the
+continuation prompt — and offers to customize it: styling on or off, the
+continuation prompt (`❯❯`; in zsh `%_❯❯`, where `%_` names the construct still
+open — `dquote❯❯`, `then❯❯` — as zsh's own default does), the accent colour (a
+256-colour index, amber `214` by default) and, in zsh, the Up/Down history keys.
+Enter keeps every default; after your answers the preview is shown again and you
+confirm or go round once more.
+
 **Changing the paths later.** Re-run the installer: each question defaults to
 your current setting, and the block is replaced in place, never duplicated. Or
 edit the block by hand — [Uninstall](#uninstall) says where it lives.
 
 **Scripted installs.** Without a terminal to ask on (`curl | bash`, CI, a
-dotfiles bootstrap) the installers refuse to guess and exit with a message —
-pass the path instead. A flag or parameter is never asked for:
+dotfiles bootstrap) the installers refuse to guess the path and exit with a
+message unless a block already has it; the look keeps its current values. Pass
+what you want instead — a flag or parameter is never asked for, and when any
+look setting is given the customization step is skipped:
 
 ```sh
-./install.sh --dev-root ~/code
+./install.sh --dev-root ~/code --ux on --keys off --accent 39 --continuation '>> '
 ```
 
 ```powershell
-./install.ps1 -DevRoot C:\code -WslDistro Ubuntu -WslRoot /home/you/dev
+./install.ps1 -DevRoot C:\code -WslDistro Ubuntu -WslRoot /home/you/dev -Accent 39
+# also: -ShellUx $false  -ContinuationPrompt '>> '
 ```
 
 `DEV_ROOT` in the environment also works for the zsh installer: scripts use it
-as the answer, and when the installer can ask, it is the default on offer.
+as the answer, and when the installer can ask it is the default on offer (after
+an existing block, which always wins).
 
 ## Configuration
 
@@ -88,6 +101,8 @@ is sourced.
 | — | `$DevWslRoot` | projects path *inside* that distro |
 | `DEV_SHELL_UX=0` | `$DevShellUx = $false` | skip the styling, keep the command |
 | `DEV_SHELL_KEYS=0` | — | skip the Up/Down history keybindings |
+| `DEV_SHELL_ACCENT` | `$DevAccent` | 256-colour index for the selected item (default `214`) |
+| `DEV_SHELL_CONTINUATION` | `$DevContinuationPrompt` | continuation prompt (default `%_❯❯ ` / `❯❯ `) |
 | — | `$DevPromptExtraLines` | extra lines your prompt occupies (auto-detected) |
 
 ## Portability — read this before using it elsewhere
@@ -98,6 +113,8 @@ is sourced.
   with zsh or PowerShell.
 - `-c` / `-Code` wherever `code` is on `PATH` (falls back to opening the local
   path when the WSL settings are absent).
+- `-o` / `-Open` opens Explorer from Windows and WSL, Finder on macOS (`open`),
+  and the desktop default on Linux (`xdg-open`, which must be installed).
 - Branch detection reads `.git/HEAD` directly rather than shelling out, so no
   `git` binary is required and it stays fast with many projects. It also works
   where a Windows `git` would refuse outright: inspecting a repo inside WSL
@@ -106,9 +123,6 @@ is sourced.
 
 **Needs something extra**
 
-- **`-e` / `--explorer` in zsh requires WSL.** It uses `wslpath` and
-  `explorer.exe`. On native Linux or macOS it exits with an error rather than
-  doing something surprising. Swap in `xdg-open` or `open` if you want it there.
 - **Suggestions and history search need two zsh plugins**, `zsh-autosuggestions`
   and `history-substring-search`. `install.sh` handles both when oh-my-zsh is
   present; without oh-my-zsh, install them yourself. The keybindings are guarded,
@@ -139,9 +153,19 @@ is sourced.
 
 ## Uninstall
 
-Delete the block between `# >>> dev-shell >>>` and `# <<< dev-shell <<<` from
-`~/.zshrc` or your `$PROFILE`, or restore one of the `*-backup-*` files the
-installers leave beside them.
+```sh
+./install.sh --uninstall
+```
+
+```powershell
+./install.ps1 -Uninstall
+```
+
+Either removes the block between `# >>> dev-shell >>>` and `# <<< dev-shell <<<`
+from `~/.zshrc` or your `$PROFILE`, backing the file up first, and says so if it
+cannot — then delete that block by hand, or restore one of the `*-backup-*`
+files the installers leave beside the config. The oh-my-zsh plugins `install.sh`
+enabled stay in `plugins=(…)`; drop them there if you no longer want them.
 
 ## Licence
 
