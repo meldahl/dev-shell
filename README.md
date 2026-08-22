@@ -70,6 +70,7 @@ block it adds).
 | — | `$DevWslRoot` | projects path *inside* that distro |
 | `DEV_SHELL_UX=0` | `$DevShellUx = $false` | skip the styling, keep the command |
 | `DEV_SHELL_KEYS=0` | — | skip the Up/Down history keybindings |
+| — | `$DevPromptExtraLines` | extra lines your prompt occupies (auto-detected) |
 
 ## Portability — read this before using it elsewhere
 

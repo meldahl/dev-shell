@@ -114,6 +114,21 @@ if ($DevShellUx -and (Get-Command Set-PSReadLineKeyHandler -ErrorAction Silently
     # Match the prompt chevron instead of the default ">>".
     Set-PSReadLineOption -ContinuationPrompt "❯❯ "
 
+    # The matched portion of a history suggestion. The default is bright cyan,
+    # which reads as unrelated to the amber selection colour.
+    Set-PSReadLineOption -Colors @{ Emphasis = "`e[1;38;5;214m" }
+
+    # A multi-line prompt (oh-my-posh, starship, ...) leaves PSReadLine
+    # miscounting where to redraw, so a tall completion menu scrolls and lands
+    # ABOVE the input line. Tell it how many EXTRA lines the prompt occupies.
+    # Set $DevPromptExtraLines yourself if invoking prompt has side effects.
+    if ($null -eq $DevPromptExtraLines) {
+        try { $DevPromptExtraLines = @((prompt) -split "`n").Count - 1 }
+        catch { $DevPromptExtraLines = 0 }
+    }
+    if ($DevPromptExtraLines -gt 0) {
+        Set-PSReadLineOption -ExtraPromptLineCount $DevPromptExtraLines
+    }
     # Predictions need a real VT console and throw when output is redirected,
     # which $Host.UI.SupportsVirtualTerminal does not reliably detect.
     # Note: the colour keys drop the "Color" suffix that the read-only
