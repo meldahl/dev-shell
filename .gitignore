@@ -1,0 +1,10 @@
+# Editor / OS noise
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# Backups the installers create
+*-backup-*
