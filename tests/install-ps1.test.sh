@@ -46,5 +46,13 @@ echo "### P12b -Uninstall with START but no END -> manual instructions"; seed 'a
 echo "### P13 module: -Open alias + escape char on this engine"; reset; run $EXE install.ps1 '' '-DevRoot C:\m' </dev/null >/dev/null
 res=$(timeout 90 $EXE -NoProfile -Command "Import-Module PSReadLine -ErrorAction SilentlyContinue; . '$PROF_W'; \"aliases=\$((Get-Command dev).Parameters['Open'].Aliases -join ',')\"; try { \$c=(Get-PSReadLineOption).SelectionColor; \"selcode=\$([int][char]\$c[0]) sel=\$(\$c.Substring(1))\"; \"cont=\$(([int[]][char[]](Get-PSReadLineOption).ContinuationPrompt) -join ',')\" } catch { 'psreadline-unavailable' }" </dev/null 2>&1 | tr -d '\r'); printf '%s\n' "$res" | grep -E 'aliases=|selcode=|cont=|unavailable'
 printf '%s' "$res" | grep -q 'aliases=Explorer' && ok "-Explorer alias" || bad "alias"; printf '%s' "$res" | grep -q 'selcode=27 sel=\[1;38;5;214m' && ok "selection colour = ESC[1;38;5;214m" || { printf '%s' "$res" | grep -q unavailable && echo "  (PSReadLine options not readable here)" || bad "selection colour"; }
+echo "### P14 project completer: one row per project as 'name  | on branch', bare name inserted"
+PROOT="$LBASE/projroot"; rm -rf "$PROOT"; mkdir -p "$PROOT/api" "$PROOT/website"; WPROOT="$WBASE\\projroot"
+res=$(timeout 90 $EXE -NoProfile -Command "\$DevRoot='$WPROOT'; . '$WBASE\\powershell\\dev-shell.ps1'; \$m=(TabExpansion2 'dev ' 4).CompletionMatches; foreach (\$c in \$m) { 'C=[' + \$c.CompletionText + '] L=[' + \$c.ListItemText.TrimEnd() + '] T=[' + \$c.ToolTip + ']' }" </dev/null 2>&1 | tr -d '\r'); printf '%s\n' "$res" | grep '^C='
+# The │ arrives as an OEM byte through the pipe, so match the middle opaquely
+# under LC_ALL=C (byte-wise) rather than as the UTF-8 separator.
+printf '%s' "$res" | LC_ALL=C grep -qE 'C=\[api\] L=\[api +[^]]*no git repo\] T=\[api\]' && ok "row: bare name inserted, 'name  │ desc' shown, tooltip = name (so it stays hidden)" || { bad "row shape"; printf '%s\n' "$res" | cat -v; }
+printf '%s' "$res" | grep -qF 'C=[website]' && ok "second project present" || bad "second project"
+[ "$(printf '%s' "$res" | grep -c '^C=')" = 2 ] && ok "one completion per project" || bad "count"
 done
 echo; echo "RESULT: $pass passed, $fail failed"; [ "$fail" = 0 ]

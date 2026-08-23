@@ -89,22 +89,30 @@ function Get-DevBranch {
     if ($line -match '^ref:\s*refs/heads/(.+)$') { return $Matches[1] }
     return $line.Substring(0, [Math]::Min(7, $line.Length))
 }
-# Complete project names, annotated with the current git branch. The fourth
-# CompletionResult argument is the tooltip, which MenuComplete shows when
-# ShowToolTips is enabled.
+# Complete project names as "name  │ on branch" rows, one per line like the zsh
+# menu. MenuComplete lays items out in columns of the widest ListItemText plus
+# two, so a row wider than half the buffer leaves room for one column only; the
+# CompletionText stays the bare name. The tooltip repeats the name, which
+# PSReadLine then does not show. (MenuComplete has no slot for a header row.)
 Register-ArgumentCompleter -CommandName dev -ParameterName Project -ScriptBlock {
     param($commandName, $parameterName, $wordToComplete, $commandAst, $fakeBoundParameters)
 
     if (-not (Test-Path $DevRoot)) { return }
+    $projects = @(Get-ChildItem $DevRoot -Directory -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -like "$wordToComplete*" } | Sort-Object Name)
+    if (-not $projects) { return }
 
-    Get-ChildItem $DevRoot -Directory -ErrorAction SilentlyContinue |
-        Where-Object { $_.Name -like "$wordToComplete*" } |
-        ForEach-Object {
-            $branch = Get-DevBranch $_.FullName
-            $desc = if ($branch) { "on $branch" } else { "no git repo" }
-            [System.Management.Automation.CompletionResult]::new(
-                $_.Name, $_.Name, 'ParameterValue', $desc)
-        }
+    $nameWidth = ($projects | ForEach-Object { $_.Name.Length } | Measure-Object -Maximum).Maximum
+    $bufferWidth = try { $Host.UI.RawUI.BufferSize.Width } catch { 0 }
+    if (-not $bufferWidth) { $bufferWidth = 120 }
+    $rowWidth = [int][Math]::Floor($bufferWidth / 2)
+    foreach ($project in $projects) {
+        $branch = Get-DevBranch $project.FullName
+        $desc = if ($branch) { "on $branch" } else { "no git repo" }
+        $row = ("{0,-$nameWidth}  │ {1}" -f $project.Name, $desc).PadRight($rowWidth)
+        [System.Management.Automation.CompletionResult]::new(
+            $project.Name, $row, 'ParameterValue', $project.Name)
+    }
 }
 
 # --- Shell UX ---------------------------------------------------------------
