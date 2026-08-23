@@ -47,6 +47,11 @@ r=$(zopen "unset WSL_DISTRO_NAME; OSTYPE=darwin22" "-e proj"); printf '%s' "$r" 
 r=$(zopen "unset WSL_DISTRO_NAME; OSTYPE=linux-gnu" "--open proj"); printf '%s' "$r" | grep -q "log: xdg-open $HOME/dev/proj" && ok "Linux -> xdg-open" || { bad "Linux"; echo "$r"; }
 r=$(zopen "unset WSL_DISTRO_NAME; OSTYPE=linux-gnu; rm -f $ST/xdg-open" "--explorer proj"); printf '%s' "$r" | grep -q 'no file manager opener found' && printf '%s' "$r" | grep -q 'rc=1' && ok "no opener -> error rc1" || { bad "no opener"; echo "$r"; }
 r=$(zopen "" "-c proj"); printf '%s' "$r" | grep -q "log: code $HOME/dev/proj" && ok "-c -> code" || { bad "code"; echo "$r"; }
+r=$(zopen "" "proj -c"); printf '%s' "$r" | grep -q "log: code $HOME/dev/proj" && printf '%s' "$r" | grep -q 'rc=0' && ok "trailing flag: proj -c -> code (no cd)" || { bad "trailing -c"; echo "$r"; }
+r=$(zopen "unset WSL_DISTRO_NAME; OSTYPE=darwin22" "proj --open"); printf '%s' "$r" | grep -q "log: open $HOME/dev/proj" && ok "trailing flag: proj --open -> open" || { bad "trailing --open"; echo "$r"; }
+r=$(zopen "" "proj -x"); printf '%s' "$r" | grep -q 'unknown option: -x' && printf '%s' "$r" | grep -q 'rc=1' && ok "unknown trailing option -> error rc1" || { bad "unknown trailing option"; echo "$r"; }
+r=$(zopen "" "proj other"); printf '%s' "$r" | grep -q 'one project at a time' && printf '%s' "$r" | grep -q 'rc=1' && ok "two projects -> error rc1" || { bad "two projects"; echo "$r"; }
+r=$(zopen "" "--help"); printf '%s' "$r" | grep -q 'usage: dev \[project\]' && ok "--help shows options-anywhere usage" || { bad "help usage"; echo "$r"; }
 echo "### B13 --uninstall"
 out=$("$INST" --uninstall </dev/null 2>&1); rc=$?; [ $rc = 0 ] && ok "rc=0" || bad "rc=$rc"; printf '%s' "$out" | grep -q 'removed the dev-shell block' && ok "message" || { bad "message"; printf '%s\n' "$out"; }
 [ "$(cat "$HOME/.zshrc")" = "$(printf '# my zshrc\nexport FOO=1')" ] && ok "zshrc back to the original (blank above the block gone)" || { bad "content:"; cat -A "$HOME/.zshrc"; }

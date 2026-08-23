@@ -44,26 +44,33 @@ _dev_open() {
 }
 
 dev() {
-  local open_code=0 open_folder=0
+  local open_code=0 open_folder=0 project='' arg
 
-  while [[ $1 == -* ]]; do
-    case $1 in
+  # Options may come before or after the project, as PowerShell binds them.
+  for arg in "$@"; do
+    case $arg in
       -c|--code)               open_code=1 ;;
       -o|--open|-e|--explorer) open_folder=1 ;;
       -h|--help)
-        print "usage: dev [-c|--code] [-o|--open] [project]"
+        print "usage: dev [project] [-c|--code] [-o|--open]"
         print "  -c, --code   open the project in VS Code"
         print "  -o, --open   open the project in your file manager"
         print "               (Explorer, Finder, or the desktop default; -e/--explorer still work)"
         print "  with no project, acts on \$DEV_ROOT ($DEV_ROOT)"
         return 0
         ;;
-      *)
-        print -u2 "dev: unknown option: $1"
+      -*)
+        print -u2 "dev: unknown option: $arg"
         return 1
         ;;
+      *)
+        if [[ -n $project ]]; then
+          print -u2 "dev: one project at a time: $project, $arg"
+          return 1
+        fi
+        project=$arg
+        ;;
     esac
-    shift
   done
 
   if [[ ! -d $DEV_ROOT ]]; then
@@ -72,10 +79,10 @@ dev() {
   fi
 
   local target=$DEV_ROOT
-  [[ -n $1 ]] && target=$DEV_ROOT/$1
+  [[ -n $project ]] && target=$DEV_ROOT/$project
 
   if [[ ! -d $target ]]; then
-    print -u2 "dev: no such project: $1"
+    print -u2 "dev: no such project: $project"
     return 1
   fi
 
