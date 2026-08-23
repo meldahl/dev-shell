@@ -193,26 +193,113 @@ if [[ ${DEV_SHELL_UX:-1} == 1 ]]; then
     zstyle ':autocomplete:*' add-semicolon no
     setopt hist_find_no_dups
 
-    # The plugin's completer paints the matched text black-on-yellow and keeps
-    # no selected-row style for the list (it retains only an unprefixed ma=,
-    # which _setup does not produce for a tagged group); both are fixed inside
-    # it. _main_complete has already turned _comp_colors into ZLS_COLORS when
-    # the post-functions run, so recolour there: match and selected row in the
-    # accent, as PSReadLine's Emphasis and ListPredictionSelected. compinit
-    # empties comppostfuncs and the plugin runs compinit at the first precmd,
-    # so the hook is (re)registered at every precmd; the plugin's own widgets
-    # shadow the array with a local copy, so it survives their runs.
-    _dev_history_colours() {
-      [[ -v ZLS_COLORS ]] || return 0
-      local accent="1;38;5;${DEV_SHELL_ACCENT:-214}"
-      ZLS_COLORS=${ZLS_COLORS//30;103/$accent}
-      [[ $ZLS_COLORS == (|*:)ma=* ]] || ZLS_COLORS+=":ma=$accent"
-    }
-    _dev_register_history_colours() {
-      (( ${comppostfuncs[(I)_dev_history_colours]} )) || comppostfuncs+=( _dev_history_colours )
+    # The list itself comes from the plugin's history completer, which fixes
+    # its own look and matching: event numbers, black-on-yellow matches, a
+    # fuzzy query, no heading. dev-shell owns that function instead -- forked
+    # from zsh-autocomplete 027cdab (Completions/_autocomplete__history_lines)
+    # and reshaped to PSReadLine's ListView: "> line ... [History]" rows under
+    # a "<-/N>   <History(N)>" heading, the input matched as a substring with
+    # prefix matches first, newest first, no duplicates, no multi-line
+    # commands, match and selected row in the accent. Up from the first row
+    # returns to the typed line (PSReadLine's virtual item) -- done at the
+    # menuselect layer below, not as a listed match. zsh can only replace the
+    # word at the cursor, so the words around it stay as typed (lbuffer/
+    # rbuffer below). Defined at the first precmd, after the
+    # plugin's compinit has declared the original for autoloading; re-check
+    # when the plugin updates.
+    _dev_define_history_lines() {
+      add-zsh-hook -d precmd _dev_define_history_lines
+      _autocomplete__history_lines() {
+        setopt localoptions multibyte extendedglob
+        (( _matcher_num > 1 )) && return 1
+
+        local -a before=( "${(@b)words[1,CURRENT-1]}" ) after=( "${(@b)words[CURRENT+1,-1]}" )
+        local lbuffer='' rbuffer='' input=$words[CURRENT]
+        (( $#before )) && lbuffer="${(j.[[:blank:]]##.)before}[[:blank:]]##"
+        (( $#after ))  && rbuffer="[[:blank:]]##${(j.[[:blank:]]##.)after}"
+        lbuffer="$lbuffer${(b)QIPREFIX}"; rbuffer="${(b)QISUFFIX}$rbuffer"
+        local pat="${lbuffer}*${rbuffer}"
+        [[ -n $input ]] && pat="${lbuffer}(#i)*${(b)input}*${rbuffer}"
+
+        local -i incremental=0 max=10
+        [[ $curcontext == *-incremental-* ]] && incremental=1
+        if (( incremental )); then
+          zstyle -s ':autocomplete:history-incremental-search-backward:' list-lines max || max=10
+        else
+          zle -R 'Loading...'
+          zstyle -s ":autocomplete:${curcontext}:" list-lines max || (( max = LINES / 2 ))
+        fi
+
+        # Newest first; prefix matches rank before the rest (PSReadLine).
+        local -a nums=( ${(On)${(k)history[(R)${~pat}]}} ) prefixed others plines olines
+        local -A seen
+        local n cmd segment
+        for n in $nums; do
+          cmd=$history[$n]
+          [[ $cmd == *$'\n'* ]] && continue
+          segment=${${cmd##$~lbuffer}%%$~rbuffer}
+          [[ -n $input && $segment == (#i)${(b)input} ]] && continue
+          (( $+seen[$segment] )) && continue
+          seen[$segment]=1
+          if [[ -n $input && $segment == (#i)${(b)input}* ]]; then
+            prefixed+=( "$segment" ); plines+=( "$cmd" )
+            (( $#prefixed >= max )) && break
+          else
+            others+=( "$segment" ); olines+=( "$cmd" )
+          fi
+        done
+        # Slice under quotes with (@) yields one empty word on an empty array,
+        # so guard each append on a non-empty source.
+        local -a matches=() lines=()
+        (( $#prefixed )) && matches=( "${(@)prefixed[1,max]}" ) lines=( "${(@)plines[1,max]}" )
+        local -i room=$(( max - $#matches ))
+        (( room > 0 && $#others )) && matches+=( "${(@)others[1,room]}" ) lines+=( "${(@)olines[1,room]}" )
+        (( $#matches )) || return 1
+
+        # Rows: "> text", the text cut with an ellipsis, "[History]" flush right.
+        local tag='[History]' text
+        local -i width=$(( COLUMNS - 1 )) textw=0
+        (( textw = width - 3 - $#tag ))
+        local -a displays
+        for text in "${(@)lines}"; do
+          (( $#text > textw )) && text="${text[1,textw-1]}…"
+          displays+=( "> ${text}${(l:textw-$#text:: :):-} ${tag}" )
+        done
+
+        # Colours: the marker and the tag in the metadata grey, the first
+        # occurrence of the input in the accent, the selected row in the
+        # accent (unprefixed ma=, which a tagged group's _setup never yields).
+        local accent="1;38;5;${DEV_SHELL_ACCENT:-214}" meta='38;5;244' w=${(b)input}
+        _comp_colors=( "=(#b)(> )*( \[History\])=0=${meta}=${meta}" "ma=${accent}" )
+        if [[ -n $input && $input != *[:=]* ]]; then
+          _comp_colors=( "=(#b)(> )((^*(#i)${w}*))((#i)${w})(*)( \[History\])=0=${meta}=0=${accent}=0=${meta}" "$_comp_colors[@]" )
+        fi
+
+        # The heading counts the real matches. It is drawn once, so it cannot
+        # track the selection the way PSReadLine's live <i/N> does.
+        local -i n=$#matches
+        local head="<-/${n}>" src="<History(${n})>"
+        local esc=$'\e'
+        local heading="%{${esc}[${meta};3m%}${head}${(l:width-$#head-$#src:: :):-}${src}%{${esc}[0m%}"
+
+        # The typed line as a last, dim row with no tag: menu selection wraps
+        # first<->last, so Up from the first match lands here and restores it,
+        # PSReadLine's virtual original item. Only with something typed -- an
+        # empty query (the Up history menu on a blank line) has nothing to
+        # return to.
+        if [[ -n $input ]]; then
+          matches+=( "$input" ); text=$input
+          (( $#text > textw )) && text="${text[1,textw-1]}…"
+          displays+=( "> ${text}" )
+        fi
+
+        local -a expl
+        _description -2V history-lines expl ''
+        builtin compadd -QU -S '' -X "$heading" -ld displays "$expl[@]" -a matches
+      }
     }
     autoload -Uz add-zsh-hook
-    add-zsh-hook precmd _dev_register_history_colours
+    add-zsh-hook precmd _dev_define_history_lines
 
     # The plugin records recent directories (cdr) under
     # ${XDG_DATA_HOME:-~/.local/share}/zsh but never creates that directory, so
@@ -243,7 +330,6 @@ if [[ ${DEV_SHELL_UX:-1} == 1 ]]; then
     _dev_menu_complete() {
       _dev_menu_enter accept
       local curcontext=
-      local +h -a comppostfuncs=( "$comppostfuncs[@]" )   # zsh's list-choices empties it; spend the copy
       zle list-choices
       zle menu-select -w
     }
