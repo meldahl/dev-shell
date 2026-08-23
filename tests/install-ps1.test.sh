@@ -7,7 +7,7 @@
 # sides can see; removed when everything passes, kept with its path printed
 # when something fails. Skipped with a note when no engine is reachable.
 set -u
-REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"; cd "$REPO"
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"; cd "$REPO" || exit 1
 engines=(); for e in pwsh.exe powershell.exe; do command -v "$e" >/dev/null 2>&1 && engines+=("$e"); done
 if [ ${#engines[@]} = 0 ]; then echo "PowerShell suite skipped: no pwsh.exe/powershell.exe on PATH (run it from WSL)"; exit 0; fi
 WTEMP=$("${engines[0]}" -NoProfile -Command '$env:TEMP' | tr -d '\r'); WHOME=$("${engines[0]}" -NoProfile -Command '$HOME' | tr -d '\r')
@@ -23,7 +23,7 @@ prof(){ [ -f "$PROF_L" ] && sed '1s/^\xEF\xBB\xBF//' "$PROF_L" | tr -d '\r' || e
 show(){ printf '%s\n' "$1" | grep -v '^\s*$' | head -${2:-5}; }
 has(){ prof | grep -qFx -- "$1" && ok "line: $1" || { bad "missing line: $1"; prof; }; }
 run(){ local exe=$1 scr=$2 pre=$3 args=$4; shift 4; timeout 90 "$exe" -NoProfile "$@" -Command "\$PROFILE='$PROF_W'; $pre; & '$WBASE\\$scr' $args" 2>&1 | tr -d '\r'; }
-reset(){ rm -rf "$LBASE/home"; }
+reset(){ rm -rf "${LBASE:?}/home"; }
 seed(){ mkdir -p "$LBASE/home"; printf '%s\r\n' "$@" > "$PROF_L"; }
 for EXE in "${engines[@]}"; do
 echo "################ $EXE ################"

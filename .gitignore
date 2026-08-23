@@ -10,3 +10,6 @@ Thumbs.db
 *-backup-*
 # Python bytecode from the test driver
 __pycache__/
+
+# Claude Code: personal permissions stay local; settings.json and hooks are shared
+.claude/settings.local.json

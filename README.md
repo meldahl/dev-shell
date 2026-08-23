@@ -1,5 +1,20 @@
 # dev-shell
 
+**Home** · [References](docs/references.md) · [History list](docs/history-list-behavior.md) · [Steering](CLAUDE.md)
+
+## Table of contents
+
+- [Overview](#overview)
+- [What it gives you](#what-it-gives-you)
+- [Install](#install)
+- [Configuration](#configuration)
+- [Portability — read this before using it elsewhere](#portability--read-this-before-using-it-elsewhere)
+- [Uninstall](#uninstall)
+- [Tests](#tests)
+- [Licence](#licence)
+
+## Overview
+
 A `dev` command plus completion and history polish, kept identical across
 **PowerShell** and **zsh** — so the same muscle memory works on Windows and
 inside WSL or Linux.
