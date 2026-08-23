@@ -35,7 +35,7 @@ notes          │ no git repo
 |---|---|
 | `dev` | cd to your projects root |
 | `dev myproject` | cd into a project |
-| `dev <Tab>` | menu of projects, annotated with the current git branch |
+| `dev <Tab>` | menu of projects, one `name │ on branch` row each |
 | `dev myproject -c` / `-Code` | open in VS Code |
 | `dev myproject -o` / `-Open` | open in your file manager — Explorer, Finder, or the desktop default (`-e` / `-Explorer` still work) |
 | `dev --help` / `Get-Help dev` | usage |
@@ -43,10 +43,12 @@ notes          │ no git repo
 Plus, in both shells: Tab opens a **visual menu** instead of cycling silently,
 the selection is **recoloured rather than boxed** (a filled box always abuts the
 next column), history drives **inline suggestions**, and **matching history is
-listed as you type** — up to ten rows under the line, Down/Up move through them,
-Enter runs the pick, Esc leaves it, and Tab still opens the project menu.
-PowerShell does this with PSReadLine's ListView, zsh with zsh-autocomplete;
-Ctrl-R in zsh switches the line to live completions instead.
+listed as you type** — up to ten `> line … [History]` rows under a
+`<-/N>  <History(N)>` heading, Down/Up move through them, Up from the first row
+returns to what you typed, Enter runs the pick, Esc leaves it, and Tab still
+opens the project menu. PowerShell does this with PSReadLine's ListView, zsh
+with a history completer dev-shell layers on zsh-autocomplete; the two are kept
+looking and behaving the same.
 
 ## Install
 
@@ -169,14 +171,16 @@ is sourced.
   text. The `│` rule and the coloured header do that work instead.
 - **The `>` marker on the selected row of PowerShell's prediction dropdown is
   hardcoded** in PSReadLine. Only its colours are configurable.
-- **The zsh history list shows event numbers and no heading.** Both are fixed
-  inside zsh-autocomplete (its list passes an empty description, which compsys
-  renders without a heading), so PSReadLine's `<History(10)>` / `<-/10>` chrome
-  has no counterpart; the match and the selected row do take the accent, because
-  dev-shell recolours the plugin's fixed black-on-yellow after the fact. Its
-  matching is also fuzzy — `pw` lists `playwright` after `pwd` — where PSReadLine
-  matches the typed text as a whole, and once the Up history menu has been opened
-  on a line, that line's live list shows completions instead of history.
+- **The zsh history list's `<-/N>` count does not track the selection** (compsys
+  draws the heading once), where PSReadLine's `<3/10>` follows the cursor; the
+  total is right. The typed line is shown as a dim last row — that is what makes
+  Up-from-the-first-row return to it — where PSReadLine keeps it off-screen. To
+  match PSReadLine's look and matching, dev-shell replaces zsh-autocomplete's
+  history completer with its own; re-check it after a plugin update (`/verify`
+  exercises it).
+- **The PowerShell `dev` menu has no header row.** MenuComplete lays items out
+  in columns with no slot for a `PROJECT │ BRANCH` heading, so that stays a
+  zsh-only touch; the project rows themselves match.
 - **No vertical spacing between the input line and the completion menu.**
   PSReadLine exposes no such option (`ExtraPromptLineCount` is for multi-line
   prompts and misusing it corrupts rendering).
