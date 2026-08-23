@@ -8,3 +8,5 @@ Thumbs.db
 
 # Backups the installers create
 *-backup-*
+# Python bytecode from the test driver
+__pycache__/

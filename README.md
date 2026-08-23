@@ -183,6 +183,15 @@ cannot — then delete that block by hand, or restore one of the `*-backup-*`
 files the installers leave beside the config. The oh-my-zsh plugins `install.sh`
 enabled stay in `plugins=(…)`; drop them there if you no longer want them.
 
+## Tests
+
+`tests/run.sh` runs both suites and fails if either does: the zsh suite (bash,
+zsh, python3, `script`; pty-driven against sandboxed homes, cloning
+zsh-autocomplete into scratch unless `ZAC=` points at one) and, from WSL, the
+PowerShell suite against pwsh 7 and Windows PowerShell 5.1 (skipped with a note
+where they are not reachable). Scratch directories are removed on success and
+kept, with their paths printed, on failure.
+
 ## Licence
 
 MIT
