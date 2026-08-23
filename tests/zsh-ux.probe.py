@@ -104,6 +104,21 @@ check("startup prints a prompt", "PS> " in start, start)
 if mode == "plugin":
     check("no history list on the empty prompt", not rows(start), start)
 
+    # A history line carrying raw ANSI escapes must not repaint the list: the
+    # control bytes show as printable '^[' text, never re-emitted raw. The
+    # seeded line's own red (ESC [31m) is a colour dev-shell never emits, so
+    # its raw form appearing would be the bleed. Checked first, on a fresh
+    # shell, where the async list renders most reliably.
+    os.write(fd, b"color")
+    raw = drain(3.0)
+    for _ in range(3):
+        if b"[History]" in raw:
+            break
+        raw += drain(2.0)
+    check("raw ANSI escapes in history do not bleed into the list",
+          b"[History]" in raw and b"\x1b[31m" not in raw and b"^[[31m" in raw, repr(raw[-400:]))
+    send(b"\x15", 1.0)
+
     # --- The history list as you type ---------------------------------------
     raw, text = send(b"pw", 2.5)
     listed = rows(text)

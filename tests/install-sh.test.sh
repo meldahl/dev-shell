@@ -64,6 +64,7 @@ uxhome(){ # $1 dir, $2 plugin|fallback -> a HOME for tests/zsh-ux.probe.py
   rm -rf "$1"; mkdir -p "$1/dev/api" "$1/dev/web" "$1/bin"; git -C "$1/dev/web" init -q -b feat/x
   printf '#!/bin/sh\necho CODE-RAN\n' > "$1/bin/code"; chmod +x "$1/bin/code"   # a history line runs 'dev api -c'; a marker, never the real editor
   printf ': 1700000001:0;dev reader\n: 1700000002:0;dev api -c\n: 1700000003:0;pwd\n: 1700000004:0;echo pwd\n: 1700000005:0;git status\n: 1700000006:0;dev web\n: 1700000007:0;pwd\n' > "$1/.zsh_history"
+  printf ': 1700000008:0;\x1b[31m esc-color line \x1b[0m\n' >> "$1/.zsh_history"   # a raw ANSI escape must not repaint the list
   { echo 'PROMPT="PS> "; HISTFILE=$HOME/.zsh_history; HISTSIZE=1000; SAVEHIST=1000; path=($HOME/bin $path)'
     if [ "$2" = plugin ]; then echo "source $ZAC/zsh-autocomplete.plugin.zsh"; [ -d "$SUG" ] && echo "source $SUG/zsh-autosuggestions.zsh"
     else echo 'autoload -Uz compinit; compinit -u -D'; echo 'history-substring-search-up() { zle up-line-or-history }; history-substring-search-down() { zle down-line-or-history }; zle -N history-substring-search-up; zle -N history-substring-search-down'; fi

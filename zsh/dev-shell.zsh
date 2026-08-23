@@ -256,12 +256,16 @@ if [[ ${DEV_SHELL_UX:-1} == 1 ]]; then
         (( room > 0 && $#others )) && matches+=( "${(@)others[1,room]}" ) lines+=( "${(@)olines[1,room]}" )
         (( $#matches )) || return 1
 
-        # Rows: "> text", the text cut with an ellipsis, "[History]" flush right.
+        # Rows: "> text", the text cut with an ellipsis, "[History]" flush
+        # right. (V) makes control characters printable (an ESC becomes ^[),
+        # so a history line that carries raw colour codes cannot repaint the
+        # list; the match array keeps the real line, so it still runs.
         local tag='[History]' text
         local -i width=$(( COLUMNS - 1 )) textw=0
         (( textw = width - 3 - $#tag ))
         local -a displays
         for text in "${(@)lines}"; do
+          text=${(V)text}
           (( $#text > textw )) && text="${text[1,textw-1]}…"
           displays+=( "> ${text}${(l:textw-$#text:: :):-} ${tag}" )
         done
@@ -288,7 +292,7 @@ if [[ ${DEV_SHELL_UX:-1} == 1 ]]; then
         # empty query (the Up history menu on a blank line) has nothing to
         # return to.
         if [[ -n $input ]]; then
-          matches+=( "$input" ); text=$input
+          matches+=( "$input" ); text=${(V)input}
           (( $#text > textw )) && text="${text[1,textw-1]}…"
           displays+=( "> ${text}" )
         fi
