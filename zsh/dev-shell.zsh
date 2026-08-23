@@ -120,25 +120,24 @@ _dev_branch() {
 _dev_projects() {
   local -a names displays
   local d name branch label hdr=PROJECT
-  integer width=0
+  integer width=${#hdr}
 
   [[ -d $DEV_ROOT ]] || return 1
 
   for d in $DEV_ROOT/*(/N); do
     name=${d:t}
+    names+=("$name")
     (( ${#name} > width )) && width=${#name}
   done
-  (( width )) || return 1
+  (( $#names )) || return 1
 
-  for d in $DEV_ROOT/*(/N); do
-    name=${d:t}
-    branch=$(_dev_branch "$d")
+  for name in $names; do
+    branch=$(_dev_branch "$DEV_ROOT/$name")
     if [[ -n $branch ]]; then
       label="on $branch"
     else
       label="no git repo"
     fi
-    names+=("$name")
     displays+=("${(r:$width:)name}  │ $label")
   done
 
