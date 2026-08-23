@@ -27,7 +27,11 @@ notes          │ no git repo
 
 Plus, in both shells: Tab opens a **visual menu** instead of cycling silently,
 the selection is **recoloured rather than boxed** (a filled box always abuts the
-next column), and history drives **inline suggestions**.
+next column), history drives **inline suggestions**, and **matching history is
+listed as you type** — up to ten rows under the line, Down/Up move through them,
+Enter runs the pick, and Tab still opens the project menu. PowerShell does this
+with PSReadLine's ListView, zsh with zsh-autocomplete; Ctrl-R in zsh switches
+the line to live completions instead.
 
 ## Install
 
@@ -57,8 +61,8 @@ editor runs inside Linux through the VS Code WSL remote rather than tunnelling
 over the filesystem bridge.
 
 Then it shows a **preview** of the look on a few sample projects — the menu
-header, the accent-coloured selected item, a ghost-text suggestion, the
-continuation prompt — and offers to customize it: styling on or off, the
+header, the accent-coloured selected item, a ghost-text suggestion, the history
+list, the continuation prompt — and offers to customize it: styling on or off, the
 continuation prompt (`❯❯`; in zsh `%_❯❯`, where `%_` names the construct still
 open — `dquote❯❯`, `then❯❯` — as zsh's own default does), the accent colour (a
 256-colour index, amber `214` by default) and, in zsh, the Up/Down history keys.
@@ -99,7 +103,7 @@ is sourced.
 | `DEV_ROOT` | `$DevRoot` | projects directory (default `~/dev`) |
 | — | `$DevWslDistro` | WSL distro for `-Code`, e.g. `Ubuntu` |
 | — | `$DevWslRoot` | projects path *inside* that distro |
-| `DEV_SHELL_UX=0` | `$DevShellUx = $false` | skip the styling, keep the command |
+| `DEV_SHELL_UX=0` | `$DevShellUx = $false` | skip the styling and the history list, keep the command |
 | `DEV_SHELL_KEYS=0` | — | skip the Up/Down history keybindings |
 | `DEV_SHELL_ACCENT` | `$DevAccent` | 256-colour index for the selected item (default `214`) |
 | `DEV_SHELL_CONTINUATION` | `$DevContinuationPrompt` | continuation prompt (default `%_❯❯ ` / `❯❯ `) |
@@ -123,10 +127,16 @@ is sourced.
 
 **Needs something extra**
 
-- **Suggestions and history search need two zsh plugins**, `zsh-autosuggestions`
-  and `history-substring-search`. `install.sh` handles both when oh-my-zsh is
-  present; without oh-my-zsh, install them yourself. The keybindings are guarded,
-  so nothing breaks if they are missing — the features are simply absent.
+- **The history list and suggestions need two zsh plugins**,
+  [`zsh-autocomplete`](https://github.com/marlonrichert/zsh-autocomplete) and
+  [`zsh-autosuggestions`](https://github.com/zsh-users/zsh-autosuggestions).
+  `install.sh` clones and enables both when oh-my-zsh is present (zsh-autocomplete
+  only with the styling on; with it off, `history-substring-search` takes Up/Down
+  instead); without oh-my-zsh, install them yourself and source dev-shell after
+  them. Everything is guarded: without zsh-autocomplete, Up/Down fall back to
+  substring search when that plugin is loaded, and a missing plugin only means the
+  feature is absent. zsh-autocomplete costs roughly 0.7–0.9 s per new shell on a
+  WSL2 machine.
 - **PowerShell predictions need PSReadLine 2.2+.** Older versions still get the
   Tab menu; the prediction block is wrapped in `try`/`catch`.
 - **A Unicode-capable font.** The `│` rule, the `❯❯` continuation prompt, and the
@@ -144,6 +154,12 @@ is sourced.
   text. The `│` rule and the coloured header do that work instead.
 - **The `>` marker on the selected row of PowerShell's prediction dropdown is
   hardcoded** in PSReadLine. Only its colours are configurable.
+- **The zsh history list shows event numbers and highlights the match
+  black-on-yellow.** Both are fixed inside zsh-autocomplete, not styles; only the
+  selected row takes the accent, and the PowerShell list has neither. Its matching
+  is also fuzzy — `pw` lists `playwright` after `pwd` — where PSReadLine matches
+  the typed text as a whole, and once the Up history menu has been opened on a
+  line, that line's live list shows completions instead of history.
 - **No vertical spacing between the input line and the completion menu.**
   PSReadLine exposes no such option (`ExtraPromptLineCount` is for multi-line
   prompts and misusing it corrupts rendering).

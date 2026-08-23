@@ -5,11 +5,18 @@
 #
 # Optional configuration, set BEFORE sourcing:
 #   DEV_ROOT                directory holding your projects  (default: $HOME/dev)
-#   DEV_SHELL_UX            0 to skip the completion styling (keeps just the command)
-#   DEV_SHELL_KEYS          0 to skip the history keybindings
+#   DEV_SHELL_UX            0 to skip the completion styling and the history list
+#                           (keeps just the command)
+#   DEV_SHELL_KEYS          0 to skip the Up/Down history keybindings
 #   DEV_SHELL_ACCENT        256-colour index for the selected item  (default: 214)
 #   DEV_SHELL_CONTINUATION  continuation prompt, i.e. PS2  (default: "%_❯❯ " -- %_ names
 #                           the open construct, e.g. dquote, as zsh's own default does)
+#
+# Source it AFTER your plugins. The history list as you type needs
+# zsh-autocomplete (marlonrichert), ghost-text suggestions need
+# zsh-autosuggestions; without zsh-autocomplete, Up/Down fall back to
+# history-substring-search when that is loaded. Everything is guarded, so a
+# missing plugin only means the feature is absent.
 
 : ${DEV_ROOT:=$HOME/dev}
 export DEV_ROOT
@@ -153,18 +160,74 @@ _dev() {
 compdef _dev dev
 
 # --- Shell UX ---------------------------------------------------------------
+# zsh-autocomplete registers the ~autocomplete named directory when it loads
+# (its README uses it as the plugin's handle), so that is the detection.
+_dev_has_autocomplete() { (( ${+nameddirs[autocomplete]} )) }
+
 if [[ ${DEV_SHELL_UX:-1} == 1 ]]; then
   # Label each completion group so the list has a heading.
   zstyle ':completion:*' group-name ''
   zstyle ':completion:*:descriptions' format '%F{81}%B%d%b%f'
 
-  # Arrow-navigable menu. 'ma' recolours the selected entry instead of filling
-  # a background box, which would otherwise run into the next column. The
-  # accent (amber by default) keeps it clear of the cyan header and the
-  # default light-blue text.
-  zstyle ':completion:*' menu select
+  # 'ma' recolours the selected entry instead of filling a background box,
+  # which would otherwise run into the next column. The accent (amber by
+  # default) keeps it clear of the cyan header and the default light-blue text.
   zmodload -i zsh/complist
   zstyle ':completion:*' list-colors "${(s.:.)LS_COLORS}" "ma=1;38;5;${DEV_SHELL_ACCENT:-214}"
+
+  if _dev_has_autocomplete; then
+    # History list as you type, PSReadLine's ListView: every line starts in
+    # history mode, 10 rows, from the first character, no duplicates
+    # (hist_find_no_dups is the switch the plugin honours), no ';' appended to
+    # a picked line. Ctrl-R switches the line to live completions instead.
+    zstyle ':autocomplete:*' default-context history-incremental-search-backward
+    zstyle ':autocomplete:history-incremental-search-backward:*' list-lines 10
+    zstyle ':autocomplete:*' min-input 1
+    zstyle ':autocomplete:*' add-semicolon no
+    setopt hist_find_no_dups
+
+    # Enter inside a menu. menuselect cannot hand Enter to a widget of ours (it
+    # leaves the menu and re-dispatches the key), so the widget that opens a
+    # menu decides: a history list runs the line, as PSReadLine does
+    # (.accept-line, re-dispatched); a completion menu only accepts the entry
+    # (accept-line's menuselect meaning). The list a line shows is history
+    # unless Ctrl-R toggled it, which the plugin records in curcontext.
+    _dev_menu_enter() { # run | accept
+      local widget=accept-line
+      [[ $1 == run ]] && widget=.accept-line
+      bindkey -M menuselect '^M' $widget
+    }
+    _dev_list_is_history() { [[ $curcontext == history-incremental-search* ]] }
+    _dev_menu_enter accept
+
+    # Tab still opens the project menu. The plugin would menu-select whatever
+    # list is already on screen -- the history list -- so list the plain
+    # completions first (curcontext is compsys's context variable; empty means
+    # the widget's own) and menu-select those.
+    _dev_menu_complete() {
+      _dev_menu_enter accept
+      local curcontext=
+      zle list-choices
+      zle menu-select -w
+    }
+    zle -N _dev_menu_complete
+    bindkey '^I' _dev_menu_complete
+
+    # Down enters the list on screen, Up opens the history menu.
+    _dev_list_select() {
+      if _dev_list_is_history; then _dev_menu_enter run; else _dev_menu_enter accept; fi
+      zle down-line-or-select -w
+    }
+    _dev_history_menu() {
+      _dev_menu_enter run
+      zle up-line-or-search -w
+    }
+    zle -N _dev_list_select
+    zle -N _dev_history_menu
+  else
+    # Arrow-navigable menu on Tab.
+    zstyle ':completion:*' menu select
+  fi
 
   # Continuation prompt, matching the PowerShell side; %_ keeps zsh's hint of
   # which construct is still open (dquote, then, ...), which PS2 shows by default.
@@ -175,9 +238,19 @@ if [[ ${DEV_SHELL_UX:-1} == 1 ]]; then
   ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=244'
 fi
 
-# Up/Down search history by what is already typed. Requires the
-# history-substring-search plugin, so only bind when it actually loaded.
-if [[ ${DEV_SHELL_KEYS:-1} == 1 ]] && (( $+functions[history-substring-search-up] )); then
-  bindkey '^[[A' history-substring-search-up
-  bindkey '^[[B' history-substring-search-down
+# Up/Down: the history menu and the list with zsh-autocomplete, otherwise
+# search history by what is already typed (history-substring-search). Both the
+# normal and the application-mode sequences are bound, so plugin order cannot
+# decide who wins.
+if [[ ${DEV_SHELL_KEYS:-1} == 1 ]]; then
+  if _dev_has_autocomplete && [[ ${DEV_SHELL_UX:-1} == 1 ]]; then
+    bindkey '^[[A' _dev_history_menu '^[OA' _dev_history_menu
+    bindkey '^[[B' _dev_list_select  '^[OB' _dev_list_select
+  elif _dev_has_autocomplete; then
+    bindkey '^[[A' up-line-or-search   '^[OA' up-line-or-search
+    bindkey '^[[B' down-line-or-select '^[OB' down-line-or-select
+  elif (( $+functions[history-substring-search-up] )); then
+    bindkey '^[[A' history-substring-search-up   '^[OA' history-substring-search-up
+    bindkey '^[[B' history-substring-search-down '^[OB' history-substring-search-down
+  fi
 fi

@@ -7,15 +7,17 @@
 #
 # Writes a dev-shell block to ~/.zshrc -- re-running replaces it, so this is
 # also how you change the settings later; every question defaults to the
-# current setting -- and installs zsh-autosuggestions plus
-# history-substring-search if oh-my-zsh is present. Without a terminal to ask
-# on (curl | bash, CI, a dotfiles script) the path must be given, via
-# --dev-root or DEV_ROOT in the environment, unless a block already has it;
-# the look keeps its current values. Anything given here is not asked for:
+# current setting -- and, when oh-my-zsh is present, installs the plugins:
+# zsh-autocomplete (the history list as you type) and zsh-autosuggestions, or
+# history-substring-search in place of zsh-autocomplete when the styling is
+# off. Without a terminal to ask on (curl | bash, CI, a dotfiles script) the
+# path must be given, via --dev-root or DEV_ROOT in the environment, unless a
+# block already has it; the look keeps its current values. Anything given here
+# is not asked for:
 #
 #   --dev-root DIR        projects directory
-#   --ux on|off           completion styling (menu, colours, suggestions)
-#   --keys on|off         Up/Down history search keybindings
+#   --ux on|off           completion styling (menu, colours, suggestions, history list)
+#   --keys on|off         Up/Down history keys (the list and menu, or substring search)
 #   --accent N            256-colour index for the selected item
 #   --continuation STR    continuation prompt (PS2)
 #   --uninstall           remove the block again (backup first)
@@ -143,9 +145,10 @@ ask_yn() { # $1 prompt, $2 default (1|0) -> YN
 # settings, on sample projects, so the choice can be made by eye.
 preview() { # $1 ux (1|0), $2 accent, $3 continuation
   local off=$'\033[0m' hdr=$'\033[1;38;5;81m' sel=$'\033[1;38;5;'"$2"'m' ghost=$'\033[38;5;244m'
+  local dim=$'\033[2m' match=$'\033[30;103m'   # zsh-autocomplete's own row number and match colours
   if [ "$1" != 1 ]; then
     echo
-    echo "  (styling off: plain completion list, no colours, no suggestions)"
+    echo "  (styling off: plain completion list, no colours, no suggestions, no history list)"
     echo "  PROJECT        │ BRANCH"
     echo "  api            │ on main"
     echo "  website        │ on feat/dark-mode"
@@ -161,6 +164,8 @@ preview() { # $1 ux (1|0), $2 accent, $3 continuation
   echo "  notes          │ no git repo"
   echo
   echo "  % dev web${ghost}site -c${off}                          <- suggestion from history"
+  echo "  ${dim} 2680  ${off}dev ${match}web${off}site -c                      <- matching history as you type"
+  echo "  ${sel} 2655  dev website -o${off}                        <- Down/Up picks a row, Enter runs it"
   echo "  % echo \"multi"
   echo "  ${3//\%_/dquote}line\"                                 <- continuation prompt"
   echo
@@ -207,7 +212,7 @@ if (( interactive && ! look_given )); then
   ask_yn "Customize the look (styling, continuation prompt, accent colour, keys)?" 0
   if (( YN )); then
     while :; do
-      ask_yn "Completion styling (menu, colours, suggestions) on?" "$ux"; ux=$YN
+      ask_yn "Completion styling (menu, colours, suggestions, history list) on?" "$ux"; ux=$YN
       if (( ux )); then
         ask "Continuation prompt" "$cont"; cont=$REPLY
         while :; do
@@ -216,7 +221,7 @@ if (( interactive && ! look_given )); then
           echo "  please give a number 0-255"
         done
       fi
-      ask_yn "Up/Down search history by what is already typed?" "$keys"; keys=$YN
+      ask_yn "Up/Down history keys (the history list, or search by what is typed)?" "$keys"; keys=$YN
       echo "With those settings:"
       preview "$ux" "$accent" "$cont"
       ask_yn "Keep these?" 1
@@ -260,23 +265,38 @@ else
   echo "added dev-shell block to $ZSHRC"
 fi
 
-# oh-my-zsh plugins: ghost-text suggestions and prefix history search.
+# oh-my-zsh plugins: the history list as you type (zsh-autocomplete) and
+# ghost-text suggestions (zsh-autosuggestions). zsh-autocomplete changes how
+# the line behaves, not only how it looks, so it follows the styling switch;
+# with the styling off, history-substring-search gives Up/Down instead. Each
+# plugin is prepended, so the last one enabled ends up first.
 OMZ="${ZSH:-$HOME/.oh-my-zsh}"
+clone_plugin() { # $1 name, $2 repository
+  [ -d "$OMZ/custom/plugins/$1" ] && return
+  echo "installing $1..."
+  git clone --depth=1 -q "$2" "$OMZ/custom/plugins/$1"
+}
+enable_plugin() { # $1 name
+  grep -qE "^plugins=.*[( ]$1[ )]" "$ZSHRC" && return
+  sed -i -E "s/^(plugins=\()/\1$1 /" "$ZSHRC"
+  echo "enabled plugin: $1"
+}
 if [ -d "$OMZ" ]; then
-  SUGG="$OMZ/custom/plugins/zsh-autosuggestions"
-  if [ ! -d "$SUGG" ]; then
-    echo "installing zsh-autosuggestions..."
-    git clone --depth=1 -q https://github.com/zsh-users/zsh-autosuggestions "$SUGG"
+  if (( ux )); then
+    plugins="zsh-autosuggestions zsh-autocomplete"
+  else
+    plugins="history-substring-search zsh-autosuggestions"
   fi
-  for p in zsh-autosuggestions history-substring-search; do
-    if ! grep -qE "^plugins=.*[( ]$p[ )]" "$ZSHRC"; then
-      sed -i -E "s/^(plugins=\()/\1$p /" "$ZSHRC"
-      echo "enabled plugin: $p"
-    fi
+  for p in $plugins; do
+    case $p in
+      zsh-autosuggestions) clone_plugin "$p" https://github.com/zsh-users/zsh-autosuggestions ;;
+      zsh-autocomplete)    clone_plugin "$p" https://github.com/marlonrichert/zsh-autocomplete ;;
+    esac
+    enable_plugin "$p"
   done
 else
-  echo "note: oh-my-zsh not found -- install zsh-autosuggestions and"
-  echo "      history-substring-search yourself for suggestions and history search."
+  echo "note: oh-my-zsh not found -- install zsh-autocomplete (the history list) and"
+  echo "      zsh-autosuggestions yourself; dev-shell configures them when they are loaded."
 fi
 
 if ! zsh -n "$ZSHRC"; then
