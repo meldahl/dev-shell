@@ -61,9 +61,10 @@ printf 'a\n# >>> dev-shell >>>\nx\n' > "$HOME/.zshrc"; out=$("$INST" --uninstall
 echo "### B14 line UX with zsh-autocomplete (pty)"; ZAC=${ZAC:-$REAL_HOME/.oh-my-zsh/custom/plugins/zsh-autocomplete}; SUG=${SUG:-$REAL_HOME/.oh-my-zsh/custom/plugins/zsh-autosuggestions}
 [ -d "$ZAC" ] || { echo "  (no local zsh-autocomplete; cloning into $S)"; git clone --depth 1 -q https://github.com/marlonrichert/zsh-autocomplete "$S/zsh-autocomplete" && ZAC=$S/zsh-autocomplete; }
 uxhome(){ # $1 dir, $2 plugin|fallback -> a HOME for tests/zsh-ux.probe.py
-  rm -rf "$1"; mkdir -p "$1/dev/api" "$1/dev/web"; git -C "$1/dev/web" init -q -b feat/x
+  rm -rf "$1"; mkdir -p "$1/dev/api" "$1/dev/web" "$1/bin"; git -C "$1/dev/web" init -q -b feat/x
+  printf '#!/bin/sh\nexit 0\n' > "$1/bin/code"; chmod +x "$1/bin/code"   # a history line runs 'dev api -c'; never the real editor
   printf ': 1700000001:0;dev reader\n: 1700000002:0;dev api -c\n: 1700000003:0;pwd\n' > "$1/.zsh_history"
-  { echo 'PROMPT="PS> "; HISTFILE=$HOME/.zsh_history; HISTSIZE=1000; SAVEHIST=1000'
+  { echo 'PROMPT="PS> "; HISTFILE=$HOME/.zsh_history; HISTSIZE=1000; SAVEHIST=1000; path=($HOME/bin $path)'
     if [ "$2" = plugin ]; then echo "source $ZAC/zsh-autocomplete.plugin.zsh"; [ -d "$SUG" ] && echo "source $SUG/zsh-autosuggestions.zsh"
     else echo 'autoload -Uz compinit; compinit -u -D'; echo 'history-substring-search-up() { zle up-line-or-history }; history-substring-search-down() { zle down-line-or-history }; zle -N history-substring-search-up; zle -N history-substring-search-down'; fi
     echo "export DEV_ROOT=$1/dev"; echo "source $MOD"; } > "$1/.zshrc"; }

@@ -193,6 +193,32 @@ if [[ ${DEV_SHELL_UX:-1} == 1 ]]; then
     zstyle ':autocomplete:*' add-semicolon no
     setopt hist_find_no_dups
 
+    # The plugin's completer paints the matched text black-on-yellow and keeps
+    # no selected-row style for the list (it retains only an unprefixed ma=,
+    # which _setup does not produce for a tagged group); both are fixed inside
+    # it. _main_complete has already turned _comp_colors into ZLS_COLORS when
+    # the post-functions run, so recolour there: match and selected row in the
+    # accent, as PSReadLine's Emphasis and ListPredictionSelected. compinit
+    # empties comppostfuncs and the plugin runs compinit at the first precmd,
+    # so the hook is (re)registered at every precmd; the plugin's own widgets
+    # shadow the array with a local copy, so it survives their runs.
+    _dev_history_colours() {
+      [[ -v ZLS_COLORS ]] || return 0
+      local accent="1;38;5;${DEV_SHELL_ACCENT:-214}"
+      ZLS_COLORS=${ZLS_COLORS//30;103/$accent}
+      [[ $ZLS_COLORS == (|*:)ma=* ]] || ZLS_COLORS+=":ma=$accent"
+    }
+    _dev_register_history_colours() {
+      (( ${comppostfuncs[(I)_dev_history_colours]} )) || comppostfuncs+=( _dev_history_colours )
+    }
+    autoload -Uz add-zsh-hook
+    add-zsh-hook precmd _dev_register_history_colours
+
+    # The plugin records recent directories (cdr) under
+    # ${XDG_DATA_HOME:-~/.local/share}/zsh but never creates that directory, so
+    # every cd would complain; create it unless cdr was pointed elsewhere.
+    zstyle -m ':chpwd:' recent-dirs-file '*' || mkdir -p -- "${XDG_DATA_HOME:-$HOME/.local/share}/zsh"
+
     # Enter inside a menu. menuselect cannot hand Enter to a widget of ours (it
     # leaves the menu and re-dispatches the key), so the widget that opens a
     # menu decides: a history list runs the line, as PSReadLine does
@@ -206,6 +232,9 @@ if [[ ${DEV_SHELL_UX:-1} == 1 ]]; then
     }
     _dev_list_is_history() { [[ $curcontext == history-incremental-search* ]] }
     _dev_menu_enter accept
+    # Esc leaves a list and restores the line, as PSReadLine's Esc dismisses
+    # its list. Arrow sequences still reach the menu: they arrive whole.
+    bindkey -M menuselect '^[' send-break
 
     # Tab still opens the project menu. The plugin would menu-select whatever
     # list is already on screen -- the history list -- so list the plain
@@ -214,6 +243,7 @@ if [[ ${DEV_SHELL_UX:-1} == 1 ]]; then
     _dev_menu_complete() {
       _dev_menu_enter accept
       local curcontext=
+      local +h -a comppostfuncs=( "$comppostfuncs[@]" )   # zsh's list-choices empties it; spend the copy
       zle list-choices
       zle menu-select -w
     }

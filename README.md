@@ -29,9 +29,9 @@ Plus, in both shells: Tab opens a **visual menu** instead of cycling silently,
 the selection is **recoloured rather than boxed** (a filled box always abuts the
 next column), history drives **inline suggestions**, and **matching history is
 listed as you type** — up to ten rows under the line, Down/Up move through them,
-Enter runs the pick, and Tab still opens the project menu. PowerShell does this
-with PSReadLine's ListView, zsh with zsh-autocomplete; Ctrl-R in zsh switches
-the line to live completions instead.
+Enter runs the pick, Esc leaves it, and Tab still opens the project menu.
+PowerShell does this with PSReadLine's ListView, zsh with zsh-autocomplete;
+Ctrl-R in zsh switches the line to live completions instead.
 
 ## Install
 
@@ -154,12 +154,14 @@ is sourced.
   text. The `│` rule and the coloured header do that work instead.
 - **The `>` marker on the selected row of PowerShell's prediction dropdown is
   hardcoded** in PSReadLine. Only its colours are configurable.
-- **The zsh history list shows event numbers and highlights the match
-  black-on-yellow.** Both are fixed inside zsh-autocomplete, not styles; only the
-  selected row takes the accent, and the PowerShell list has neither. Its matching
-  is also fuzzy — `pw` lists `playwright` after `pwd` — where PSReadLine matches
-  the typed text as a whole, and once the Up history menu has been opened on a
-  line, that line's live list shows completions instead of history.
+- **The zsh history list shows event numbers and no heading.** Both are fixed
+  inside zsh-autocomplete (its list passes an empty description, which compsys
+  renders without a heading), so PSReadLine's `<History(10)>` / `<-/10>` chrome
+  has no counterpart; the match and the selected row do take the accent, because
+  dev-shell recolours the plugin's fixed black-on-yellow after the fact. Its
+  matching is also fuzzy — `pw` lists `playwright` after `pwd` — where PSReadLine
+  matches the typed text as a whole, and once the Up history menu has been opened
+  on a line, that line's live list shows completions instead of history.
 - **No vertical spacing between the input line and the completion menu.**
   PSReadLine exposes no such option (`ExtraPromptLineCount` is for multi-line
   prompts and misusing it corrupts rendering).

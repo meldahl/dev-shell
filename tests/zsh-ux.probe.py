@@ -86,12 +86,24 @@ if mode == "plugin":
 
     send(b"\x1b[B", 1.0)   # Down: next project
     raw, text = send(b"\r", 2.0)
-    check("Enter in the project menu accepts only (no run, no new prompt)",
-          "no such project" not in text and "PS> " not in text, text)
+    send(b"\x15", 1.0)
+    check("Enter in the project menu accepts only (line not run: still in $HOME)",
+          "no such project" not in text and query(b"$PWD") == home, text)
+    raw, text = send(b"pw", 2.5)
+    check("recolour survives a Tab earlier on the line (hook kept)", b"\x1b[1;38;5;214m" in raw and b"30;103" not in raw, repr(raw[-300:]))
     send(b"\x15", 1.0)
 
     raw, text = send(b"pw", 2.5)
     check("'pw' lists the history row 'pwd'", any("pwd" in r for r in rows(text)), text)
+    check("match recoloured to the accent, no black-on-yellow", b"\x1b[1;38;5;214m" in raw and b"30;103" not in raw, repr(raw[-300:]))
+    raw, text = send(b"\x1b[B", 1.5)
+    check("Down: selected history row carries the accent", b"\x1b[1;38;5;214m" in raw, repr(raw[-300:]))
+    raw, text = send(b"\x1b", 1.5)
+    check("Esc leaves the list without running it (no pwd output)", home not in text, text)
+    raw, text = send(b"d", 2.0)
+    check("typing continues after Esc (pwd row listed again)", any("pwd" in r for r in rows(text)), text)
+    send(b"\x15", 1.0)
+    raw, text = send(b"pw", 2.5)
     send(b"\x1b[B", 1.5)
     raw, text = send(b"\r", 2.5)
     check("Down + Enter runs the picked history line (pwd output + new prompt)", home in text and "PS> " in text, text)
@@ -109,8 +121,8 @@ if mode == "plugin":
     raw, text = send(b"\x1b[B", 2.0)
     check("after Ctrl-R, Down enters the live completion list (PROJECT table)", "PROJECT  │ BRANCH" in text, text)
     raw, text = send(b"\r", 2.0)
-    check("Enter there accepts only (no run, no new prompt)", "no such project" not in text and "PS> " not in text, text)
     send(b"\x15", 1.0)
+    check("Enter there accepts only (line not run: still in $HOME)", "no such project" not in text and query(b"$PWD") == home, text)
 
     binds = query(b"$(bindkey '^[OA')|$(bindkey '^[[A')|$(bindkey '^[OB')|$(bindkey '^[[B')|$(bindkey '^I')|$(bindkey -M menuselect '^M')")
     check("Up (both forms) -> _dev_history_menu", binds.count("_dev_history_menu") == 2, binds)
@@ -121,6 +133,10 @@ if mode == "plugin":
     check("no 'menu' zstyle from dev-shell with the plugin", "menu select" not in styles, styles)
     check("min-input 1, history default-context, 10 list-lines, hist_find_no_dups",
           "min-input 1" in styles and "history-incremental-search-backward" in styles and "list-lines 10" in styles and styles.endswith("on"), styles)
+
+    # Last, since the cd lands in history and would be picked by the Up menu above.
+    raw, text = send(b"cd dev\r", 2.5)
+    check("cd does not trip the plugin's recent-dirs hook (data dir created)", "chpwd_recent" not in text and "no such file" not in text, text)
 else:
     binds = query(b"$(bindkey '^[OA')|$(bindkey '^[[A')|$(bindkey '^[OB')|$(bindkey '^[[B')|$(bindkey '^I')")
     check("fallback: Up (both forms) -> history-substring-search-up", binds.count("history-substring-search-up") == 2, binds)
