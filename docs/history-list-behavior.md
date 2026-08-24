@@ -9,95 +9,86 @@
   - [What the list shows](#what-the-list-shows)
   - [Keys](#keys)
   - [Colours](#colours)
-  - [Without zsh-autocomplete](#without-zsh-autocomplete)
   - [Switches](#switches)
-- [Known gaps against PowerShell](#known-gaps-against-powershell)
-- [How it is built, and what it leans on](#how-it-is-built-and-what-it-leans-on)
+- [Remaining differences from PowerShell](#remaining-differences-from-powershell)
+- [How it is built](#how-it-is-built)
 - [Enforcing checks](#enforcing-checks)
 - [Decisions](#decisions)
 
 ## Overview
 
-PowerShell shows PSReadLine's ListView — history predictions in a list under the line, filtered as you type. The zsh side mirrors it with zsh-autocomplete in history mode, configured and partly re-shaped by `zsh/dev-shell.zsh`. This is the contract both sides are held to, the gaps that cannot be closed, and where each ruling is enforced. Rulings made by Karl on 2026-08-23; when one changes, this file changes in the same commit as the code.
+PowerShell shows PSReadLine's ListView — history predictions in a list under the line, filtered as you type, with a live `<i/N>` position header. The zsh side mirrors it with a ListView dev-shell draws and drives itself in the Zsh line editor — **no plugin**. This is the contract both sides are held to, the few differences that remain, and where each ruling is enforced. Rulings by Karl on 2026-08-23/24; a change here lands in the same commit as the code.
 
 ## The contract
 
 ### What the list shows
 
-- Matching history appears **as you type, from the first character**, up to **ten rows** under the line, each `> line … [History]` under a `<-/N>   <History(N)>` heading — PSReadLine's ListView, mirrored by dev-shell's own history completer. Nothing shows on an empty prompt.
-- The typed text is matched as a **substring**, case-insensitively; **prefix matches rank first**, then the rest, each **newest first** (PowerShell's history predictor). No duplicates, no multi-line commands.
-- The **matched text** and the **selected row** are in the accent; there are no event numbers and no background box.
-- A picked line is inserted **without a trailing `;`**; **Enter runs it**.
-- **Ctrl-R** is the plugin's reverse-search toggle within the list; the list stays history.
+- Matching history appears **as you type, from the first character**, up to **ten** `> line` rows under a `<i/N>  <History(i/N)>` heading; nothing on an empty prompt.
+- The typed text is matched as a **case-insensitive substring**; **prefix matches rank first**, then the rest, each **newest first**. No duplicates, no multi-line commands, and no line no longer than what you typed (it would add nothing) — the same cut PSReadLine makes.
+- **Control characters are shown printable** (an ESC becomes `^[`), so a history line's own colour codes cannot repaint the list.
+- The list is the prediction display — its top row is the suggestion. Where zsh-autosuggestions is loaded, its inline grey ghost is **turned off** while the list is active, so the two do not fight over the space (PowerShell's ListView likewise has no inline ghost).
 
 ### Keys
 
-| Key | In the list is on screen | Inside the list (menu selection) |
-|---|---|---|
-| **Down** | enters the list, first row selected | next row |
-| **Up** | opens the **history menu** (all matches, arrow-navigable) | previous row |
-| **Enter** | runs the line as typed | **runs** the selected history line (PowerShell: Enter executes); in a **completion** menu — the PROJECT table after Tab or after Ctrl-R — it only **accepts** the entry (PowerShell's MenuComplete) |
-| **Esc** | — | **leaves** the list and restores the line (PowerShell's Esc dismisses its list) |
-| **Tab** | opens the **project menu** even while the live list shows history | next item |
-| typing | keeps filtering | leaves the list and keeps filtering |
-| Ctrl-G / Ctrl-C | — | leave, restoring the line |
+| Key | Effect |
+|---|---|
+| **Down** | select the next row; the line becomes that history entry; the header advances (`<1/N>`, `<2/N>`, …) |
+| **Up** | select the previous row; **from the first row, return to the line you typed** with its cursor (the header shows `<-/N>`) — PSReadLine's original item, no extra row |
+| Down past the last row / Up past the first | wrap through the typed line |
+| **Enter** | run the current line (the selected entry, or what you typed) |
+| **Esc** | dismiss the list and restore the typed line |
+| **Tab** | open the project menu; the history list gives way to it |
+| typing / editing | re-filters; selection resets to the typed line |
+| Left / Right / Home / End | move the cursor (the list stays) |
 
-The typed line is a **virtual last row**: menu selection wraps first↔last, so **Up from the first match returns to what you typed** (and Down past the last match reaches it too), restoring the line — PSReadLine's original-input item. The list appears while typing, so the caret is at the end of the line; it returns there.
+Without `DEV_SHELL_KEYS` (set to 0), Up/Down/Esc keep their zsh defaults and the list still renders as a passive preview.
 
 ### Colours
 
-- The **matched text** and the **selected row** take the accent (`DEV_SHELL_ACCENT`, default 214, bold) — PowerShell's `Emphasis` and `ListPredictionSelected`. The `> ` marker, the `[History]` tag and the heading are the metadata grey.
-- No background box anywhere (the same stance as the Tab menu: recolour, don't box).
-
-### Without zsh-autocomplete
-
-Up/Down search history by what is already typed (history-substring-search) when that plugin is loaded; Tab is zsh's menu selection; nothing else changes. Everything is guarded, so a missing plugin only removes the feature.
+- The **matched text** and the **selected row** are in the accent (`DEV_SHELL_ACCENT`, default 214, bold) — PowerShell's `Emphasis` and `ListPredictionSelected`. The `> ` marker and the heading are the metadata grey (`fg=244`). No background box.
 
 ### Switches
 
-- `DEV_SHELL_UX=0`: none of the above is configured (the plugin, if loaded, keeps its own defaults); `install.sh --ux off` enables history-substring-search instead of zsh-autocomplete.
-- `DEV_SHELL_KEYS=0`: dev-shell binds no Up/Down keys.
+- `DEV_SHELL_UX=0`: no list and no menu styling (just the `dev` command); if zsh-autosuggestions is loaded its ghost is left on.
+- `DEV_SHELL_KEYS=0`: the list renders but Up/Down/Esc stay at their zsh defaults.
+- `DEV_SHELL_ACCENT`: the 256-colour index for the match and the selection.
 
-## Known gaps against PowerShell
+## Remaining differences from PowerShell
 
-- **The `<-/N>` index does not track the selection.** PSReadLine updates it to `<3/10>` as you move; the zsh heading is drawn once (compsys's `-X` explanation is static), so it always reads `<-/N>` with the right total but not the live position.
-- **The virtual original is a visible last row** (`> your text`, dim, no tag). PSReadLine keeps it off-screen; here it is what makes Up-from-the-first-row work.
-- **Deep in-list walks reset in fast succession is fine, but the plugin re-renders the list on every event**, so a very slow keystroke cadence can drop a selection back to the first row; at human speed the arrows hold.
-- **Esc waits `KEYTIMEOUT`** (zsh's default 0.4 s) before acting, since arrow keys start with the same byte.
-- **Startup cost**: zsh-autocomplete adds roughly 0.7–0.9 s to a new shell on a WSL2 machine.
+- **Esc within ~30 ms of the next keystroke** can be read as the start of a key sequence rather than a lone Esc (dev-shell peeks after Esc to tell an arrow from a bare Esc). At human speed this never bites; only a machine typing instantly after Esc would.
+- **Matching is a plain case-insensitive substring**, where PSReadLine's predictor has extra ranking heuristics; dev-shell keeps it to prefix-first, newest-first.
 
-## How it is built, and what it leans on
+Everything else — the rows, the live `<i/N>` header that tracks the selection, the typed line restored on Up with no phantom row, the accent colours — matches.
 
-All in the `_dev_has_autocomplete` branch of `zsh/dev-shell.zsh`, each with a comment stating the coupling:
+## How it is built
 
-- History mode = `zstyle ':autocomplete:*' default-context history-incremental-search-backward`, `list-lines 10`, `min-input 1`, `add-semicolon no`, `setopt hist_find_no_dups`.
-- **The list itself:** dev-shell owns `_autocomplete__history_lines`, replacing the plugin's (forked from zsh-autocomplete `027cdab` and reshaped). It matches the word at the cursor as a case-insensitive substring against the history values (`${(k)history[(R)…]}`, newest first via `(On)`), keeps the words around the cursor fixed, builds `> line … [History]` rows with an ellipsis, colours match and selected row via `_comp_colors`, draws the `<-/N>` heading through `-X`, and appends the typed line as a hidden-in-count last match for the virtual original. Defined at the first precmd, after the plugin's compinit declares the original for autoloading — **re-check it when the plugin updates.**
-- Tab (`_dev_menu_complete`): the plugin would menu-select the history list already on screen, so dev-shell lists the plain completions first (`zle list-choices` with a local, empty `curcontext` — compsys's own context variable) and then `zle menu-select -w`. Verified alternatives: `zle -Rc` does not invalidate the on-screen list within the same widget; the plugin's private `_autocomplete__partial_list` would, but is internal.
-- Enter (`_dev_menu_enter run|accept`): `menuselect` cannot hand Enter to a user widget — it leaves the menu and re-dispatches the key — so the widget that **opens** a menu binds `^M` first: `.accept-line` (run) for a history list, `accept-line` (accept only) for a completion menu; Down decides by the plugin's global `curcontext` (history unless Ctrl-R toggled the line).
-- Esc: `bindkey -M menuselect '^[' send-break`.
-- The plugin's recent-dirs feature writes to `${XDG_DATA_HOME:-~/.local/share}/zsh` without creating it; dev-shell creates the directory unless cdr was pointed elsewhere (the plugin's `enabled`/`recent-dirs` switches are read at source time, before dev-shell loads).
+All in the `DEV_SHELL_UX` branch of `zsh/dev-shell.zsh`, under "History list as you type":
+
+- **Rendering** is `POSTDISPLAY` (the text zsh shows after the buffer): `_dev_lv_render`, hooked on `line-pre-redraw` via `add-zle-hook-widget`, builds `\n<heading>\n> row…` and colours it with `region_highlight` entries (tagged `memo=devlv` so they are cleared cleanly). Offsets index the combined buffer + POSTDISPLAY.
+- **Matching** is `_dev_lv_compute`: `${(k)history[(R)(#i)*query*]}` newest-first via `(On)`, split into prefix and substring hits, capped at ten. `${(V)…}` visualises control characters.
+- **State**: `_dev_lv_sel` (−1 = the typed line), `_dev_lv_orig`/`_dev_lv_ocur` (the typed line and its cursor), `_dev_lv_expect` (the buffer a nav widget set, to tell navigation from a real edit), `_dev_lv_matches`.
+- **Navigation**: `_dev_lv_down` / `_dev_lv_up` move `_dev_lv_sel`, copy the entry onto the line, and wrap through −1. `_dev_lv_render` runs only after an editing or navigation widget (a `_DEV_LV_KEEP` allow-list), so the project menu and the list never draw at once.
+- **Enter** is plain `accept-line`; a `line-finish` hook clears the list. **Esc** is `_dev_lv_escape`: it peeks for a following byte (an arrow or other sequence, which it dispatches) versus a lone Esc (which dismisses) — avoiding the `KEYTIMEOUT` lag a bare `^[` binding adds to every arrow.
+- **zsh-autosuggestions** is suppressed while the list is on (`_ZSH_AUTOSUGGEST_DISABLED=1` when its functions are present), so its async ghost cannot clobber `POSTDISPLAY`.
 
 ## Enforcing checks
 
-`tests/zsh-ux.probe.py`, driven by `tests/install-sh.test.sh` B14 (plugin) and B15 (fallback); names as printed by the suite:
+`tests/zsh-ux.probe.py`, driven by `tests/install-sh.test.sh` B14 (`full`, keys on) and B15 (`nokeys`). It drives an interactive zsh through a pty and renders the real terminal grid with a small VT emulator, so overlapping redraws resolve to the final screen. Named checks:
 
 | Ruling | Check |
 |---|---|
-| nothing on an empty prompt; rows from the first characters | `no history list on the empty prompt`, `'dev ' lists the history rows starting with it`, `'pw' lists the history row 'pwd'` |
-| Tab → project menu, header intact, accent row | `Tab opens the PROJECT menu, header not truncated by short names`, `menu lists the projects with the branch column`, `selected project row in the accent` |
-| Enter accepts in a completion menu, runs from a history list | `Enter in the project menu accepts only (line not run: still in $HOME)`, `Down + Enter runs the picked history line`, `Enter in the Up history menu runs the selected line`, `Enter there accepts only (line not run: still in $HOME)` (after Ctrl-R) |
-| Esc leaves; typing continues | `Esc leaves the list without running it (no pwd output)`, `typing continues after Esc` |
-| rows, heading, ordering, no event numbers | `'pw' lists matching history rows as '> line [History]'`, `prefix match ranks before the substring match`, `heading shows <-/N> and <History(N)>`, `no event numbers on the rows` |
-| colours | `match highlighted in the accent, not black-on-yellow`, `Down selects a row in the accent` |
-| virtual original | `Down + Enter runs the first (prefix) match 'pwd'`, `Down then Up returns to the typed line 'pw'` (the fuller row-2/row-3/wrap walk is manual — the plugin's re-render defeats a slow pty cadence) |
-| Up menu | `Up opens the history menu filtered by the typed prefix` |
-| dev-shell owns the completer | `dev-shell owns the history completer`; fallback: `dev-shell does not own the history completer` |
-| bindings and styles | `Up (both forms) -> _dev_history_menu`, `Down (both forms) -> _dev_list_select`, `Tab -> _dev_menu_complete`, `menuselect Enter is accept-line or .accept-line`, `no 'menu' zstyle from dev-shell with the plugin`, `min-input 1, history default-context, 10 list-lines, hist_find_no_dups` |
-| recent-dirs directory | `cd does not trip the plugin's recent-dirs hook (data dir created)` |
-| fallback | B15: `Up (both forms) -> history-substring-search-up`, `Down (both forms) -> history-substring-search-down`, `Tab stays expand-or-complete`, `'menu select' zstyle set`, `second Tab selects a row in the accent` |
+| nothing on an empty prompt; rows from the first characters, prefix-first, no numbers | `no history list on the empty prompt`, `'pw' lists matching history rows as '> line'`, `prefix match ranks before the substring match`, `no event numbers on the rows` |
+| live header | `heading shows <-/N> with the match count`, `Down selects the first row (header <1/2>…)`, `Down again advances the selection (header <2/2>)`, `Up walks back (header <1/2>)`, `Up from the first row returns to the typed line (header <-/2>)` |
+| Enter runs; virtual original | `Down + Enter runs the first (prefix) match 'pwd'`, `Down then Up + Enter runs the typed line 'pw' (virtual original)` |
+| Esc | `Esc dismisses the list (header gone)`, `Esc restored the typed line: the run line was 'pwX'` |
+| colours | `matched text highlighted in the accent`, `Down selects the first row … row in the accent` |
+| raw escapes | `raw ANSI escapes in history do not bleed into the list` |
+| Tab menu coexists | `'dev ' lists the history rows starting with it`, `Tab opens the PROJECT menu…`, `Tab hides the history list (no <History> heading with the menu)` |
+| no plugin; cd quiet | `dev-shell needs no plugin (the ListView render is dev-shell's own function)`, `cd does not error` |
+| keys off | B15 `nokeys: Up/Down/Esc are not bound to the list widgets` (and the list-content checks run in this mode too) |
 
 ## Decisions
 
-- 2026-08-23 — zsh-autocomplete in history mode chosen by Karl for as-you-type parity over an fzf Ctrl-R list, with the measured costs accepted (startup, fuzzy matching, plugin-fixed chrome).
-- 2026-08-23 — Enter runs from a history list and only accepts from a completion menu; Esc leaves; Tab keeps the project menu; Up/Down owned by the plugin, substring search as the fallback.
-- 2026-08-23 — after Karl's first look, dev-shell **owns the history completer** to match PSReadLine: `> line [History]` rows, `<-/N> <History(N)>` heading, substring matching, no event numbers, accent colours, and a virtual original row so Up-from-the-first-row restores the typed line. The PowerShell `dev` menu became one `name │ on branch` row per project to match the zsh menu.
+- 2026-08-23 — a history list as you type, chosen for PSReadLine parity over an fzf Ctrl-R list.
+- 2026-08-24 — after Karl's feedback that a plugin-based list could not track the header or restore the line, dev-shell **draws and drives its own ListView** in ZLE (dropping zsh-autocomplete): a live `<i/N>` header, the typed line as a real virtual original (Up restores it, no phantom row), Esc to dismiss. The PowerShell `dev` menu shows one `name │ on branch` row per project to match.
+- 2026-08-24 — the ListView is the prediction display; zsh-autosuggestions' inline ghost is **suppressed while the list is on** (they conflict for `POSTDISPLAY`, and PowerShell's ListView has no inline ghost). The plugin stays installed for `DEV_SHELL_UX=0`.

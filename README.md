@@ -42,13 +42,13 @@ notes          │ no git repo
 
 Plus, in both shells: Tab opens a **visual menu** instead of cycling silently,
 the selection is **recoloured rather than boxed** (a filled box always abuts the
-next column), history drives **inline suggestions**, and **matching history is
-listed as you type** — up to ten `> line … [History]` rows under a
-`<-/N>  <History(N)>` heading, Down/Up move through them, Up from the first row
-returns to what you typed, Enter runs the pick, Esc leaves it, and Tab still
-opens the project menu. PowerShell does this with PSReadLine's ListView, zsh
-with a history completer dev-shell layers on zsh-autocomplete; the two are kept
-looking and behaving the same.
+next column), and **matching history is listed as you type** — up to ten
+`> line` rows under a live `<i/N>  <History(i/N)>` heading, Down/Up move through
+them (the header tracks the position), Up from the first row returns to what you
+typed with its cursor, Enter runs the pick, Esc leaves it, and Tab still opens
+the project menu. PowerShell does this with PSReadLine's ListView; zsh with a
+ListView dev-shell draws itself in the line editor — no plugin — so the two look
+and behave the same.
 
 ## Install
 
@@ -121,7 +121,7 @@ is sourced.
 | — | `$DevWslDistro` | WSL distro for `-Code`, e.g. `Ubuntu` |
 | — | `$DevWslRoot` | projects path *inside* that distro |
 | `DEV_SHELL_UX=0` | `$DevShellUx = $false` | skip the styling and the history list, keep the command |
-| `DEV_SHELL_KEYS=0` | — | skip the Up/Down history keybindings |
+| `DEV_SHELL_KEYS=0` | — | leave Up/Down/Esc at their zsh defaults (the list still shows) |
 | `DEV_SHELL_ACCENT` | `$DevAccent` | 256-colour index for the selected item (default `214`) |
 | `DEV_SHELL_CONTINUATION` | `$DevContinuationPrompt` | continuation prompt (default `%_❯❯ ` / `❯❯ `) |
 | — | `$DevPromptExtraLines` | extra lines your prompt occupies (auto-detected) |
@@ -144,16 +144,15 @@ is sourced.
 
 **Needs something extra**
 
-- **The history list and suggestions need two zsh plugins**,
-  [`zsh-autocomplete`](https://github.com/marlonrichert/zsh-autocomplete) and
-  [`zsh-autosuggestions`](https://github.com/zsh-users/zsh-autosuggestions).
-  `install.sh` clones and enables both when oh-my-zsh is present (zsh-autocomplete
-  only with the styling on; with it off, `history-substring-search` takes Up/Down
-  instead); without oh-my-zsh, install them yourself and source dev-shell after
-  them. Everything is guarded: without zsh-autocomplete, Up/Down fall back to
-  substring search when that plugin is loaded, and a missing plugin only means the
-  feature is absent. zsh-autocomplete costs roughly 0.7–0.9 s per new shell on a
-  WSL2 machine.
+- **The history list needs no plugin** — it is drawn in the zsh line editor.
+  The one optional extra is
+  [`zsh-autosuggestions`](https://github.com/zsh-users/zsh-autosuggestions) for
+  grey inline ghost text; `install.sh` clones and enables it when oh-my-zsh is
+  present. Because the list is itself the prediction (its top row is the
+  suggestion), the ghost is turned off while the list is on, so the two do not
+  fight — the same as PowerShell's ListView, which has no inline ghost. If you
+  were running [`zsh-autocomplete`](https://github.com/marlonrichert/zsh-autocomplete),
+  remove it from `plugins=(…)`: it draws its own list and would conflict.
 - **PowerShell predictions need PSReadLine 2.2+.** Older versions still get the
   Tab menu; the prediction block is wrapped in `try`/`catch`.
 - **A Unicode-capable font.** The `│` rule, the `❯❯` continuation prompt, and the
@@ -165,19 +164,19 @@ is sourced.
 - **Windows PowerShell 5.1 cannot follow a symlink whose target is a UNC path.**
   If `$DevRoot` is a symlink to `\\wsl.localhost\...`, 5.1 fails on it entirely
   while PowerShell 7 is fine. Point `$DevRoot` straight at the UNC path on 5.1.
-- **The description column cannot be coloured in zsh.** Two independent limits
-  close it off: zsh escapes control characters inside `compadd` display strings,
-  and `list-colors` patterns match the completion *value*, never the displayed
-  text. The `│` rule and the coloured header do that work instead.
+- **The description column cannot be coloured in zsh's Tab menu.** Two
+  independent limits close it off: zsh escapes control characters inside
+  `compadd` display strings, and `list-colors` patterns match the completion
+  *value*, never the displayed text. The `│` rule and the coloured header do
+  that work instead. (The history list, drawn separately, has no such limit —
+  its match and selection are in the accent.)
 - **The `>` marker on the selected row of PowerShell's prediction dropdown is
   hardcoded** in PSReadLine. Only its colours are configurable.
-- **The zsh history list's `<-/N>` count does not track the selection** (compsys
-  draws the heading once), where PSReadLine's `<3/10>` follows the cursor; the
-  total is right. The typed line is shown as a dim last row — that is what makes
-  Up-from-the-first-row return to it — where PSReadLine keeps it off-screen. To
-  match PSReadLine's look and matching, dev-shell replaces zsh-autocomplete's
-  history completer with its own; re-check it after a plugin update (`/verify`
-  exercises it).
+- **The zsh history list matches on a plain case-insensitive substring**
+  (prefix-first, newest-first), where PSReadLine's predictor has extra ranking;
+  and a keystroke within ~30 ms of Esc can read as a key sequence rather than a
+  lone Esc. Neither bites at human speed. The look, the live `<i/N>` header, and
+  the typed-line-restored-on-Up otherwise match PowerShell exactly.
 - **The PowerShell `dev` menu has no header row.** MenuComplete lays items out
   in columns with no slot for a `PROJECT │ BRANCH` heading, so that stays a
   zsh-only touch; the project rows themselves match.
@@ -207,11 +206,11 @@ enabled stay in `plugins=(…)`; drop them there if you no longer want them.
 ## Tests
 
 `tests/run.sh` runs both suites and fails if either does: the zsh suite (bash,
-zsh, python3, `script`; pty-driven against sandboxed homes, cloning
-zsh-autocomplete into scratch unless `ZAC=` points at one) and, from WSL, the
-PowerShell suite against pwsh 7 and Windows PowerShell 5.1 (skipped with a note
-where they are not reachable). Scratch directories are removed on success and
-kept, with their paths printed, on failure.
+zsh, python3, `script`; pty-driven against sandboxed homes, with a small VT
+emulator rendering the terminal grid) and, from WSL, the PowerShell suite
+against pwsh 7 and Windows PowerShell 5.1 (skipped with a note where they are
+not reachable). Scratch directories are removed on success and kept, with their
+paths printed, on failure.
 
 ## Licence
 

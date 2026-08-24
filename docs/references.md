@@ -18,9 +18,10 @@ The official documentation for everything dev-shell depends on, one row per depe
 
 | Topic | Source | When |
 |---|---|---|
-| Line editor (`zle`, `bindkey`, widgets, `zle -R`/`-M`/`-N`/`-C`, `zle widget -w`) | https://zsh.sourceforge.io/Doc/Release/Zsh-Line-Editor.html (`man zshzle`) | binding keys, writing widgets, anything `menuselect` |
+| Line editor (`zle`, `bindkey`, widgets, `BUFFER`/`CURSOR`/`POSTDISPLAY`/`PREDISPLAY`, `region_highlight`, `KEYTIMEOUT`, `read -k`) | https://zsh.sourceforge.io/Doc/Release/Zsh-Line-Editor.html (`man zshzle`) | the history ListView: drawing below the line, colouring it, binding keys |
+| ZLE hook widgets (`add-zle-hook-widget line-pre-redraw` / `line-finish`) | https://zsh.sourceforge.io/Doc/Release/User-Contributions.html#index-add_002dzle_002dhook_002dwidget (`man zshcontrib`) | the ListView's render and cleanup hooks |
 | Completion system (`zstyle` styles, `_description`, `_setup`, `list-colors`, `format`, `group-name`, `menu`) | https://zsh.sourceforge.io/Doc/Release/Completion-System.html (`man zshcompsys`) | the `_dev` completer, any `zstyle ':completion:*'` |
-| Completion widgets (`compadd`, `compstate`, `_comp_colors`, `compprefuncs`/`comppostfuncs`, `curcontext`) | https://zsh.sourceforge.io/Doc/Release/Completion-Widgets.html (`man zshcompwid`) | `_dev_projects`, the `comppostfuncs` recolour hook |
+| Completion widgets (`compadd`, `compstate`, `curcontext`) | https://zsh.sourceforge.io/Doc/Release/Completion-Widgets.html (`man zshcompwid`) | `_dev_projects` (the Tab project menu) |
 | complist module (`menuselect` keymap, `ma=` and friends, `ZLS_COLORS`) | https://zsh.sourceforge.io/Doc/Release/Zsh-Modules.html#The-zsh_002fcomplist-Module (`man zshmodules`) | menu selection, what Enter/Esc do inside a list |
 | Contributed functions (`history-beginning-search-menu`, `cdr`/`chpwd_recent_dirs`, `add-zsh-hook`) | https://zsh.sourceforge.io/Doc/Release/User-Contributions.html (`man zshcontrib`) | recent-dirs, hooks |
 | Options (`hist_find_no_dups`, `share_history`, `autopushd`…) | https://zsh.sourceforge.io/Doc/Release/Options.html (`man zshoptions`) | any `setopt` |
@@ -28,14 +29,12 @@ The official documentation for everything dev-shell depends on, one row per depe
 
 ## zsh plugins
 
+The history list needs no plugin. The one optional extra is the inline ghost.
+
 | Topic | Source | When |
 |---|---|---|
-| zsh-autocomplete — README (keys, install, requirements) | https://github.com/marlonrichert/zsh-autocomplete#readme | the history list as you type; which keys it owns |
-| zsh-autocomplete — CONFIGURATION.md (`default-context`, `min-input`, `list-lines`, `add-semicolon`, key rebinding) | https://github.com/marlonrichert/zsh-autocomplete/blob/main/CONFIGURATION.md | every `zstyle ':autocomplete:*'` dev-shell sets |
-| zsh-autocomplete — source of the history completer (`_autocomplete__history_lines`: fuzzy query, hard-coded `30;103` match colour, `ma=` filter) | https://github.com/marlonrichert/zsh-autocomplete/blob/main/Completions/_autocomplete__history_lines | why colours are rewritten after the fact |
-| zsh-autosuggestions | https://github.com/zsh-users/zsh-autosuggestions#readme | `ZSH_AUTOSUGGEST_*` variables |
-| zsh-history-substring-search | https://github.com/zsh-users/zsh-history-substring-search#readme | the Up/Down fallback without zsh-autocomplete |
-| oh-my-zsh — plugins and `$ZSH_CUSTOM` | https://github.com/ohmyzsh/ohmyzsh/wiki/Plugins · https://github.com/ohmyzsh/ohmyzsh/wiki/Customization | `install.sh`'s `clone_plugin` / `enable_plugin` |
+| zsh-autosuggestions (`ZSH_AUTOSUGGEST_*`, `_ZSH_AUTOSUGGEST_DISABLED`) | https://github.com/zsh-users/zsh-autosuggestions#readme | the optional ghost text; how the ListView suppresses it while it is on |
+| oh-my-zsh — plugins and `$ZSH_CUSTOM` | https://github.com/ohmyzsh/ohmyzsh/wiki/Plugins · https://github.com/ohmyzsh/ohmyzsh/wiki/Customization | `install.sh` cloning/enabling zsh-autosuggestions |
 
 ## PowerShell
 

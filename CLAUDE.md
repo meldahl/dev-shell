@@ -27,7 +27,7 @@ The global rules apply: end completed work with a clickable AskUserQuestion (ope
 | A new `dev` option | the `for arg` parser (options bind before or after the project), the `_dev()` `_arguments` spec; PowerShell's `param()` with the same name | `zsh/dev-shell.zsh` `dev()` / `_dev()`, `powershell/dev-shell.ps1` |
 | Open something external | `_dev_open` — WSL → `explorer.exe`, macOS → `open`, else `xdg-open` | `zsh/dev-shell.zsh` |
 | A completion list with a header and aligned columns | `_dev_projects`: `compadd -Q -l -X header -d displays -a names`; width starts at the header's length. PowerShell: `name │ desc` rows padded past half the buffer so MenuComplete stays single-column | `zsh/dev-shell.zsh`, `powershell/dev-shell.ps1` |
-| Anything in the line editor under zsh-autocomplete | the `_dev_has_autocomplete` branch: the owned `_autocomplete__history_lines` completer, `_dev_menu_complete` (Tab), `_dev_list_select` (Down), `_dev_history_menu` (Up), `_dev_menu_enter run\|accept` | `zsh/dev-shell.zsh` "Shell UX"; contract in [docs/history-list-behavior.md](docs/history-list-behavior.md) |
+| The history list as you type | the ListView in the `DEV_SHELL_UX` branch: `_dev_lv_render` (POSTDISPLAY + region_highlight, on `line-pre-redraw`), `_dev_lv_compute`, `_dev_lv_down`/`_dev_lv_up` (nav, −1 = the typed line), `_dev_lv_escape` (dismiss/dispatch), `_dev_lv_finish` | `zsh/dev-shell.zsh` "Shell UX"; contract in [docs/history-list-behavior.md](docs/history-list-behavior.md) |
 | A new install-time setting | `current` / `quoted` / `ask` / `ask_yn` / `preview` and the `BLOCK` template, flags parsed in the top loop; PowerShell: `param()` plus the same marked block | `install.sh`, `install.ps1` |
 | A new oh-my-zsh plugin | `clone_plugin` + `enable_plugin` (prepends; the last one enabled ends first) | `install.sh` |
 | A test of an installer | headless: `"$INST" --flag </dev/null`; prompted: `pty()` through `script`; PowerShell: `run()` with the `$PROFILE` override and the probe copy | `tests/install-sh.test.sh`, `tests/install-ps1.test.sh` |
@@ -36,7 +36,7 @@ The global rules apply: end completed work with a clickable AskUserQuestion (ope
 
 ## Code style
 
-- zsh module: `local` everything, `print -r --`, guard-first, `(( flag ))`, `$+commands[x]` / `$+functions[x]`; comments state constraints — many are couplings to zsh-autocomplete internals, keep them accurate when the plugin moves.
+- zsh module: `local` everything, `print -r --`, guard-first, `(( flag ))`, `$+commands[x]` / `$+functions[x]`; comments state constraints — many are ZLE couplings (POSTDISPLAY, region_highlight offsets, hook order, KEYTIMEOUT), keep them accurate.
 - bash (`install.sh`, tests): `set -u`, POSIX-leaning, **shellcheck clean at warning level**; no `# shellcheck disable` without a `-- reason`.
 - PowerShell mirrors the zsh side name for name (`$DevRoot` / `DEV_ROOT`, `-Open` / `--open`, `$DevAccent` / `DEV_SHELL_ACCENT`).
 - Tests are dense one-line checks with `ok` / `bad` counters and a `RESULT: N passed, M failed` line; a behaviour fix lands with a check, and a bug report becomes a failing check first.
@@ -44,9 +44,9 @@ The global rules apply: end completed work with a clickable AskUserQuestion (ope
 ## Architecture notes
 
 - Files: `zsh/dev-shell.zsh` (module: `dev`, completion, Shell UX, keys), `powershell/dev-shell.ps1`, `install.sh` / `install.ps1` (write a marked block into `~/.zshrc` / `$PROFILE`; a re-run replaces it; `--uninstall` / `-Uninstall`), `tests/` (see [Verification standard](#verification-standard)), `docs/`.
-- Load order matters: the block is sourced at the **end** of `.zshrc`, after oh-my-zsh and its plugins; dev-shell detects zsh-autocomplete through its `~autocomplete` named directory and configures it at source time and at precmd. Everything is guarded — without the plugin, Up/Down fall back to history-substring-search.
-- zsh-autocomplete couplings, each commented in the Shell UX block: history mode via `default-context`; **dev-shell owns `_autocomplete__history_lines`** (the list's look, matching and virtual-original item); Tab = `list-choices` + `menu-select -w` with a local `curcontext`; Enter decided by the widget that opens a menu (menuselect cannot run a user widget); Esc = `send-break` in menuselect; the plugin's recent-dirs data directory created. The owned completer is a fork pinned to a plugin commit — after a plugin update, run `/verify`; the suite exercises every coupling.
-- Headless installs need a path (flag, env, or an existing block); plugins: zsh-autocomplete + zsh-autosuggestions with the styling on, history-substring-search + zsh-autosuggestions with it off.
+- Load order: the block is sourced at the **end** of `.zshrc`, after oh-my-zsh and any plugins. The history list needs **no plugin** — it is drawn in ZLE (`POSTDISPLAY` + `region_highlight`, a `line-pre-redraw` hook). The one optional extra is zsh-autosuggestions (ghost text), which the ListView **suppresses while it is on** (`_ZSH_AUTOSUGGEST_DISABLED=1`) so the two do not fight for `POSTDISPLAY`.
+- ZLE couplings, commented in the Shell UX block: the render runs only after an editing/nav widget (a `_DEV_LV_KEEP` allow-list) so it never draws over the Tab project menu; `region_highlight` offsets index buffer + POSTDISPLAY and are tagged `memo=devlv`; Esc peeks the next byte to tell an arrow from a lone Esc (no `KEYTIMEOUT` lag). zsh-autocomplete, if still in `plugins=(…)`, draws its own list and conflicts — `install.sh` warns.
+- Headless installs need a path (flag, env, or an existing block); the only plugin the installer touches is zsh-autosuggestions (optional ghost text).
 - This machine has the real install (block in `~/.zshrc`); the suites never touch the real HOME — sandbox homes under `mktemp`, the PowerShell suite under Windows `%TEMP%`.
 
 ## Verification standard
@@ -55,7 +55,7 @@ The global rules apply: end completed work with a clickable AskUserQuestion (ope
 
 ## Docs, plan, memory
 
-- [docs/references.md](docs/references.md): the registry of official docs for every dependency (zsh manual sections, zsh-autocomplete, PSReadLine, WSL…). A new dependency adds a row in the same change.
+- [docs/references.md](docs/references.md): the registry of official docs for every dependency (zsh manual sections incl. ZLE, PSReadLine, WSL…). A new dependency adds a row in the same change.
 - Behaviour rulings go to `docs/<domain>-behavior.md` — the narrative contract plus pointers to the checks that enforce it — in the same change as the code. First instance: [docs/history-list-behavior.md](docs/history-list-behavior.md).
 - Markdown convention (global): one nav bar under every H1 (current doc bold), a `## Table of contents`, lead text under `## Overview`; verify links and anchors after a restructure.
 - Plan: `~/.claude/plans/dev-shell-plan.md` ("Where things stand" first). Memory: `~/.claude/projects/-home-karlb-dev-dev-shell/memory/`.
