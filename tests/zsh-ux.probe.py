@@ -288,7 +288,7 @@ if mode == "full":
 else:
     binds = query(b"$(bindkey '^[[A')|$(bindkey '^[OA')|$(bindkey '^[[B')|$(bindkey '^[')")
     check("nokeys: Up/Down/Esc are not bound to the list widgets",
-          "_dev_lv_up" not in binds and "_dev_lv_down" not in binds and "_dev_lv_escape" not in binds, binds)
+          "_dev_hl_up" not in binds and "_dev_hl_down" not in binds and "_dev_hl_escape" not in binds, binds)
     # The list itself still renders on typing -- that is the top-of-run
     # "'pw' lists ..." check, which runs in this mode too.
     send(b"\x15", 0.5)
@@ -327,7 +327,7 @@ check("option rows show the option and its description",
 send(b"\x07\x15", 0.6)
 
 check("dev-shell needs no plugin (the ListView render is dev-shell's own function)",
-      query(b"$+functions[_dev_lv_render]") == "1", "")
+      query(b"$+functions[_dev_hl_hook]") == "1", "")
 check("the two-column menu helper is shared (projects and options)",
       query(b"$+functions[_dev_two_col]") == "1", "")
 

@@ -6,6 +6,7 @@
 set -u
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 status=0
-echo "=== zsh suite ==="; bash "$here/install-sh.test.sh" || status=1
+echo "=== engine unit tests (pure zsh) ==="; zsh "$here/engine.test.zsh" || status=1
+echo; echo "=== zsh suite ==="; bash "$here/install-sh.test.sh" || status=1
 echo; echo "=== PowerShell suite ==="; bash "$here/install-ps1.test.sh" || status=1
 exit $status
