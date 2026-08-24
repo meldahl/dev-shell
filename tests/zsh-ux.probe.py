@@ -306,6 +306,14 @@ check("menu lists the projects with the branch column",
       any("api" in ln for ln in menu) and any("on feat/x" in ln for ln in menu), menu)
 check("Tab hides the history list (no <History> heading with the menu)",
       not any("<History" in ln for ln in menu), menu)
+if mode == "full":
+    raw, _ = send(b"\x1b[B", 1.0)      # navigate inside the project menu
+    check("navigating the project menu keeps the history list hidden",
+          not any("<History" in ln for ln in current()), current())
+    send(b"\x07", 0.6)                  # Ctrl-G: leave the menu
+    raw, _ = send(b"x", 1.2)           # an edit brings the list back
+    check("an edit after the menu brings the history list back",
+          any("<History" in ln for ln in current()), current())
 send(b"\x07\x15", 0.6)
 
 check("dev-shell needs no plugin (the ListView render is dev-shell's own function)",

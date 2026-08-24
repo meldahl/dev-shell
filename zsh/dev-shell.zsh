@@ -202,24 +202,40 @@ if [[ ${DEV_SHELL_UX:-1} == 1 ]]; then
   # and driven here -- no plugin -- so the header tracks the selection exactly
   # and nothing is faked. zsh-autosuggestions (ghost text) still layers on top.
   typeset -g  _dev_lv_orig='' _dev_lv_expect=$'\0'
-  typeset -gi _dev_lv_sel=-1 _dev_lv_ocur=0
+  typeset -gi _dev_lv_sel=-1 _dev_lv_ocur=0 _dev_lv_off=0
   typeset -ga _dev_lv_matches=()
   typeset -gi _DEV_LV_MAX=10
   typeset -g  _dev_lv_accent="fg=${DEV_SHELL_ACCENT:-214},bold" _dev_lv_meta='fg=244'
 
-  # Widgets after which the list stays: typing, its edits, and the list's own
-  # navigation. Anything else (completion, accept, history recall) hides it, so
-  # the project menu and the list never draw at once.
-  typeset -ga _DEV_LV_KEEP=(
+  # Editing widgets: after one of these the list is (re)shown. Tab and the
+  # project menu it opens suspend the list until the next real edit, so the two
+  # never draw at once; cursor moves keep the list but do not un-suspend it.
+  typeset -ga _DEV_LV_EDIT=(
     self-insert backward-delete-char delete-char delete-char-or-list
     backward-kill-word kill-word backward-kill-line kill-line kill-whole-line
-    yank yank-pop bracketed-paste forward-char backward-char
+    yank yank-pop bracketed-paste
+  )
+  # After these the list stays as it is (its own navigation and cursor moves).
+  typeset -ga _DEV_LV_KEEP=(
+    "${_DEV_LV_EDIT[@]}" forward-char backward-char
     beginning-of-line end-of-line _dev_lv_down _dev_lv_up
   )
 
+  # Drop the list's own region_highlight entries. ZLE 5.8 strips the `memo`
+  # attribute, so they cannot be tagged -- but they are the only highlights in
+  # the POSTDISPLAY range (offset >= the buffer length), so filter by offset and
+  # keep anything colouring the buffer itself (e.g. syntax highlighting).
+  _dev_lv_clear_hl() {
+    local -a keep=(); local e
+    for e in $region_highlight; do
+      (( ${e%% *} < $#BUFFER )) && keep+=( "$e" )
+    done
+    region_highlight=( "${keep[@]}" )
+  }
+
   _dev_lv_hide() {
     _dev_lv_matches=(); POSTDISPLAY=''
-    region_highlight=( "${(@)region_highlight:#*memo=devlv*}" )
+    _dev_lv_clear_hl
   }
 
   _dev_lv_compute() {
@@ -244,23 +260,33 @@ if [[ ${DEV_SHELL_UX:-1} == 1 ]]; then
 
   _dev_lv_render() {
     setopt localoptions extendedglob
+    local lw=${LASTWIDGET#.}
+    # A genuine edit ends a Tab/menu suspension; while suspended, stay hidden.
+    if (( _dev_lv_off )); then
+      if (( ${_DEV_LV_EDIT[(Ie)$lw]} )); then _dev_lv_off=0
+      else _dev_lv_hide; return; fi
+    fi
     # Draw only after an edit or the list's own navigation.
-    if [[ -n $LASTWIDGET ]] && (( ! ${_DEV_LV_KEEP[(Ie)${LASTWIDGET#.}]} )); then
+    if [[ -n $LASTWIDGET ]] && (( ! ${_DEV_LV_KEEP[(Ie)$lw]} )); then
       _dev_lv_hide; return
     fi
     if [[ $BUFFER != $_dev_lv_expect ]]; then     # a real edit
       _dev_lv_sel=-1; _dev_lv_orig=$BUFFER; _dev_lv_ocur=$CURSOR
       _dev_lv_expect=$BUFFER; _dev_lv_compute
     fi
-    region_highlight=( "${(@)region_highlight:#*memo=devlv*}" )
+    _dev_lv_clear_hl
     if (( ! $#_dev_lv_matches )); then POSTDISPLAY=''; return; fi
 
+    # Heading: "<i/N>" hard left, "<History(i/N)>" hard right, spread across the
+    # window as PowerShell's ListView shows it.
     local -i n=$#_dev_lv_matches
     local sel='-'; (( _dev_lv_sel >= 0 )) && sel=$(( _dev_lv_sel + 1 ))
-    local head="<${sel}/${n}>  <History(${sel}/${n})>"
+    local left="<${sel}/${n}>" right="<History(${sel}/${n})>"
+    local -i pad=$(( COLUMNS - ${#left} - ${#right} )); (( pad < 2 )) && pad=2
+    local head="${left}${(l:pad:: :):-}${right}"
     local body=$'\n'$head
     local -i off=$(( $#BUFFER + 1 ))              # past the leading newline
-    region_highlight+=( "$off $(( off + $#head )) ${_dev_lv_meta},memo=devlv" )
+    region_highlight+=( "$off $(( off + $#head )) ${_dev_lv_meta}" )
     (( off += $#head ))
 
     local q=${(V)_dev_lv_expect} row
@@ -270,15 +296,15 @@ if [[ ${DEV_SHELL_UX:-1} == 1 ]]; then
       (( ${#row} > COLUMNS - 3 )) && row="${row[1,COLUMNS-4]}…"
       body+=$'\n'"> $row"
       (( off += 1 ))                              # the newline
-      region_highlight+=( "$off $(( off + 2 )) ${_dev_lv_meta},memo=devlv" )   # "> "
+      region_highlight+=( "$off $(( off + 2 )) ${_dev_lv_meta}" )   # "> "
       (( off += 2 ))
       tstart=$off; tend=$(( off + ${#row} ))
       if (( i - 1 == _dev_lv_sel )); then
-        region_highlight+=( "$tstart $tend ${_dev_lv_accent},memo=devlv" )
+        region_highlight+=( "$tstart $tend ${_dev_lv_accent}" )
       elif [[ -n $q ]]; then
         qi=${row[(i)(#i)${(b)q}]}
         (( qi <= ${#row} )) &&
-            region_highlight+=( "$(( tstart + qi - 1 )) $(( tstart + qi - 1 + ${#q} )) ${_dev_lv_accent},memo=devlv" )
+            region_highlight+=( "$(( tstart + qi - 1 )) $(( tstart + qi - 1 + ${#q} )) ${_dev_lv_accent}" )
       fi
       (( off = tend ))
     done
@@ -311,7 +337,11 @@ if [[ ${DEV_SHELL_UX:-1} == 1 ]]; then
     fi
     _dev_lv_sel=-1; _dev_lv_hide
   }
-  _dev_lv_finish() { _dev_lv_sel=-1; _dev_lv_expect=$'\0'; _dev_lv_hide }
+  _dev_lv_finish() { _dev_lv_sel=-1; _dev_lv_off=0; _dev_lv_expect=$'\0'; _dev_lv_hide }
+
+  # Tab opens the project menu: suspend the list (until the next edit) and hide
+  # it first, so the list and the menu never draw at once.
+  _dev_lv_complete() { _dev_lv_off=1; _dev_lv_hide; zle expand-or-complete }
 
   # Esc dismisses the list -- but arrows and other keys arrive as ESC-prefixed
   # sequences, so peek: a byte right after ESC means a sequence, which we
@@ -336,16 +366,18 @@ if [[ ${DEV_SHELL_UX:-1} == 1 ]]; then
     _dev_lv_dismiss
   }
 
-  zle -N _dev_lv_down; zle -N _dev_lv_up; zle -N _dev_lv_escape
+  zle -N _dev_lv_down; zle -N _dev_lv_up; zle -N _dev_lv_escape; zle -N _dev_lv_complete
   add-zle-hook-widget line-pre-redraw _dev_lv_render
   add-zle-hook-widget line-finish _dev_lv_finish
 fi
 
-# Up/Down drive the history list and Esc dismisses it; both the normal and the
-# application-mode arrow sequences are bound. DEV_SHELL_KEYS=0 leaves the keys
-# at their zsh defaults (the list still shows, as a passive preview).
+# Up/Down drive the history list, Esc dismisses it, Tab opens the project menu
+# (suspending the list); both the normal and the application-mode arrow
+# sequences are bound. DEV_SHELL_KEYS=0 leaves the keys at their zsh defaults
+# (the list still shows, as a passive preview).
 if [[ ${DEV_SHELL_UX:-1} == 1 && ${DEV_SHELL_KEYS:-1} == 1 ]]; then
   bindkey '^[[A' _dev_lv_up   '^[OA' _dev_lv_up
   bindkey '^[[B' _dev_lv_down '^[OB' _dev_lv_down
   bindkey '^[' _dev_lv_escape
+  bindkey '^I' _dev_lv_complete
 fi
