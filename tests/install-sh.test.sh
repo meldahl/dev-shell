@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # dev-shell zsh suite: the installer headless and at a pty, the module under
-# zsh, the opener with stubbed tools, --uninstall, the line UX with and
-# without zsh-autocomplete (pty, via zsh-ux.probe.py), and oh-my-zsh plugin
-# selection with a stubbed git. Needs bash, zsh, python3, script(1), git.
-# zsh-autocomplete and zsh-autosuggestions are taken from ~/.oh-my-zsh/custom
-# (ZAC= and SUG= override); zsh-autocomplete is cloned into scratch when it is
-# not there. Scratch is a mktemp directory, removed when everything passes and
-# kept, with its path printed, when something fails. Exits non-zero on failure.
+# zsh, the opener with stubbed tools, --uninstall, the history-list UX (pty, via
+# tests/zsh-ux.probe.py -- the list needs no plugin), and the installer's
+# zsh-autosuggestions handling with a stubbed git. Needs bash, zsh, python3,
+# script(1), git. zsh-autosuggestions is taken from ~/.oh-my-zsh/custom (SUG=
+# overrides) and, when present, sourced so the probe checks the ListView
+# suppresses its ghost. Scratch is a mktemp directory, removed when everything
+# passes and kept, with its path printed, when something fails. Exits non-zero
+# on failure.
 set -u
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"; INST=$REPO/install.sh; MOD=$REPO/zsh/dev-shell.zsh
 REAL_HOME=$HOME; S="$(mktemp -d "${TMPDIR:-/tmp}/devshell-zsh.XXXXXX")"
@@ -58,23 +59,22 @@ out=$("$INST" --uninstall </dev/null 2>&1); rc=$?; [ $rc = 0 ] && ok "rc=0" || b
 "$INST" --uninstall </dev/null 2>&1 | grep -q 'nothing to remove' && ok "second --uninstall: nothing to remove" || bad "second uninstall"
 printf 'a\n\n# >>> dev-shell >>>\nx\n# <<< dev-shell <<<\nb\n\nc\n' > "$HOME/.zshrc"; "$INST" --uninstall </dev/null >/dev/null 2>&1; [ "$(cat "$HOME/.zshrc")" = "$(printf 'a\nb\n\nc')" ] && ok "middle block removed with its blank; other blanks kept" || { bad "middle:"; cat -A "$HOME/.zshrc"; }
 printf 'a\n# >>> dev-shell >>>\nx\n' > "$HOME/.zshrc"; out=$("$INST" --uninstall </dev/null 2>&1); rc=$?; [ $rc = 1 ] && printf '%s' "$out" | grep -q 'by hand' && ok "no END -> rc1 + manual steps" || { bad "no END (rc=$rc)"; printf '%s\n' "$out"; }; [ "$(cat "$HOME/.zshrc")" = "$(printf 'a\n# >>> dev-shell >>>\nx')" ] && ok "untouched" || bad "changed"
-echo "### B14 line UX with zsh-autocomplete (pty)"; ZAC=${ZAC:-$REAL_HOME/.oh-my-zsh/custom/plugins/zsh-autocomplete}; SUG=${SUG:-$REAL_HOME/.oh-my-zsh/custom/plugins/zsh-autosuggestions}
-[ -d "$ZAC" ] || { echo "  (no local zsh-autocomplete; cloning into $S)"; git clone --depth 1 -q https://github.com/marlonrichert/zsh-autocomplete "$S/zsh-autocomplete" && ZAC=$S/zsh-autocomplete; }
-uxhome(){ # $1 dir, $2 plugin|fallback -> a HOME for tests/zsh-ux.probe.py
+echo "### B14 history-list UX, keys on (pty)"; SUG=${SUG:-$REAL_HOME/.oh-my-zsh/custom/plugins/zsh-autosuggestions}
+uxhome(){ # $1 dir, $2 keys(1|0) -> a HOME for tests/zsh-ux.probe.py (no plugin)
   rm -rf "$1"; mkdir -p "$1/dev/api" "$1/dev/web" "$1/bin"; git -C "$1/dev/web" init -q -b feat/x
   printf '#!/bin/sh\necho CODE-RAN\n' > "$1/bin/code"; chmod +x "$1/bin/code"   # a history line runs 'dev api -c'; a marker, never the real editor
   printf ': 1700000001:0;dev reader\n: 1700000002:0;dev api -c\n: 1700000003:0;pwd\n: 1700000004:0;echo pwd\n: 1700000005:0;git status\n: 1700000006:0;dev web\n: 1700000007:0;pwd\n' > "$1/.zsh_history"
   printf ': 1700000008:0;\x1b[31m esc-color line \x1b[0m\n' >> "$1/.zsh_history"   # a raw ANSI escape must not repaint the list
-  { echo 'PROMPT="PS> "; HISTFILE=$HOME/.zsh_history; HISTSIZE=1000; SAVEHIST=1000; path=($HOME/bin $path)'
-    if [ "$2" = plugin ]; then echo "source $ZAC/zsh-autocomplete.plugin.zsh"; [ -d "$SUG" ] && echo "source $SUG/zsh-autosuggestions.zsh"
-    else echo 'autoload -Uz compinit; compinit -u -D'; echo 'history-substring-search-up() { zle up-line-or-history }; history-substring-search-down() { zle down-line-or-history }; zle -N history-substring-search-up; zle -N history-substring-search-down'; fi
-    echo "export DEV_ROOT=$1/dev"; echo "source $MOD"; } > "$1/.zshrc"; }
+  { echo 'PROMPT="PS> "; HISTFILE=$HOME/.zsh_history; HISTSIZE=1000; SAVEHIST=0; setopt extendedglob; path=($HOME/bin $path)'
+    echo 'autoload -Uz compinit; compinit -u -D'
+    [ -d "$SUG" ] && echo "source $SUG/zsh-autosuggestions.zsh"   # the ListView must suppress its ghost
+    echo "export DEV_ROOT=$1/dev DEV_SHELL_ACCENT=214 DEV_SHELL_KEYS=$2"; echo "source $MOD"; } > "$1/.zshrc"; }
 uxprobe(){ # $1 dir, $2 mode: run the probe, fold its PASS/FAIL lines into the totals
   local out; out=$(python3 "$REPO/tests/zsh-ux.probe.py" "$1" "$2" 2>&1); printf '%s\n' "$out" | grep -E '^  (PASS|FAIL)|^    \|'
   pass=$((pass + $(printf '%s\n' "$out" | grep -c '^  PASS'))); fail=$((fail + $(printf '%s\n' "$out" | grep -c '^  FAIL'))); }
-uxhome $S/shtest/ux-plugin plugin; uxprobe $S/shtest/ux-plugin plugin
-echo "### B15 line UX without zsh-autocomplete: substring-search fallback (pty)"; uxhome $S/shtest/ux-fallback fallback; uxprobe $S/shtest/ux-fallback fallback
-echo "### B16 oh-my-zsh plugins: cloned and enabled by the styling switch (stub git)"
+uxhome $S/shtest/ux-full 1; uxprobe $S/shtest/ux-full full
+echo "### B15 history-list UX, keys off (list shows, keys stay zsh defaults)"; uxhome $S/shtest/ux-nokeys 0; uxprobe $S/shtest/ux-nokeys nokeys
+echo "### B16 installer enables zsh-autosuggestions (stub git)"
 OH=$S/shtest/omzhome; rm -rf $OH; mkdir -p $OH/.oh-my-zsh/custom/plugins $OH/bin
 cat > $OH/bin/git <<'EOF'
 #!/bin/sh
@@ -84,11 +84,11 @@ exit 0
 EOF
 chmod +x $OH/bin/git; printf '# rc\nplugins=(git)\n' > $OH/.zshrc
 HOME=$OH PATH=$OH/bin:$PATH "$INST" --dev-root /p </dev/null >/dev/null 2>&1
-grep -qx 'plugins=(zsh-autocomplete zsh-autosuggestions git)' $OH/.zshrc && ok "ux on: zsh-autocomplete first, then zsh-autosuggestions" || { bad "ux on plugins"; grep '^plugins' $OH/.zshrc; }
-[ -d $OH/.oh-my-zsh/custom/plugins/zsh-autocomplete ] && [ -d $OH/.oh-my-zsh/custom/plugins/zsh-autosuggestions ] && ok "both plugins cloned" || bad "clone dirs"
+grep -qx 'plugins=(zsh-autosuggestions git)' $OH/.zshrc && ok "zsh-autosuggestions enabled (no other plugin added)" || { bad "plugins"; grep '^plugins' $OH/.zshrc; }
+[ -d $OH/.oh-my-zsh/custom/plugins/zsh-autosuggestions ] && [ ! -d $OH/.oh-my-zsh/custom/plugins/zsh-autocomplete ] && ok "only zsh-autosuggestions cloned" || bad "clone dirs"
 HOME=$OH PATH=$OH/bin:$PATH "$INST" --dev-root /p </dev/null >/dev/null 2>&1
-[ "$(grep -c '^plugins=' $OH/.zshrc)" = 1 ] && grep -qx 'plugins=(zsh-autocomplete zsh-autosuggestions git)' $OH/.zshrc && [ "$(grep -c clone $OH/git.log)" = 2 ] && ok "re-run: no duplicate entries, no re-clone" || bad "re-run"
+[ "$(grep -c '^plugins=' $OH/.zshrc)" = 1 ] && grep -qx 'plugins=(zsh-autosuggestions git)' $OH/.zshrc && [ "$(grep -c clone $OH/git.log)" = 1 ] && ok "re-run: no duplicate entry, no re-clone" || bad "re-run"
 printf '# rc\nplugins=(git)\n' > $OH/.zshrc; rm -rf $OH/.oh-my-zsh/custom/plugins/*
 HOME=$OH PATH=$OH/bin:$PATH "$INST" --dev-root /p --ux off </dev/null >/dev/null 2>&1
-grep -qx 'plugins=(zsh-autosuggestions history-substring-search git)' $OH/.zshrc && [ ! -d $OH/.oh-my-zsh/custom/plugins/zsh-autocomplete ] && ok "ux off: history-substring-search instead of zsh-autocomplete" || { bad "ux off plugins"; grep '^plugins' $OH/.zshrc; }
+grep -qx 'plugins=(zsh-autosuggestions git)' $OH/.zshrc && ok "ux off: still just zsh-autosuggestions" || { bad "ux off plugins"; grep '^plugins' $OH/.zshrc; }
 echo; echo "RESULT: $pass passed, $fail failed"; [ "$fail" = 0 ]
