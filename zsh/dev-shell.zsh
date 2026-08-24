@@ -122,46 +122,62 @@ _dev_branch() {
   fi
 }
 # One row per project, with the current git branch as a description column.
-#
-# _describe would collapse projects that share a branch onto a single row, so
-# the display strings are built directly. Note that zsh escapes control
-# characters inside compadd display strings, and list-colors patterns match the
-# completion VALUE rather than the displayed text -- so the description column
-# cannot be coloured separately. The header and the │ rule carry that job.
-# -l lists one project per row: without it zsh packs the display strings into
-# as many columns as fit, and the header then tops only the first of them.
+# One completion menu style, used for both the project list and the options, so
+# they read the same: a "LEFT  │ RIGHT" header over rows aligned to the widest
+# left cell. Args are the two header words then (value label description)
+# triples -- the value is inserted, the label shown in the left column. Note
+# that zsh escapes control characters in display strings and list-colors match
+# the completion VALUE not the display, so the description cannot be coloured;
+# the │ rule and the coloured header carry that. -l lists one row each.
+_dev_two_col() {
+  emulate -L zsh
+  local hl=$1 hr=$2; shift 2
+  local -a vals=() labels=() descs=()
+  while (( $# >= 3 )); do vals+=( "$1" ); labels+=( "$2" ); descs+=( "$3" ); shift 3; done
+  (( $#vals )) || return 1
+  integer width=${#hl} i
+  for i in {1..$#labels}; do (( ${#labels[i]} > width )) && width=${#labels[i]}; done
+  local -a displays=()
+  for i in {1..$#vals}; do displays+=( "${(r:$width:)labels[i]}  │ ${descs[i]}" ); done
+  compadd -Q -l -X "%F{81}%B${(r:$width:)hl}  │ ${hr}%b%f" -d displays -a vals
+}
+
 _dev_projects() {
-  local -a names displays
-  local d name branch label hdr=PROJECT
-  integer width=${#hdr}
-
   [[ -d $DEV_ROOT ]] || return 1
-
+  local d name branch label
+  local -a triples=()
   for d in $DEV_ROOT/*(/N); do
     name=${d:t}
-    names+=("$name")
-    (( ${#name} > width )) && width=${#name}
+    branch=$(_dev_branch "$d")
+    [[ -n $branch ]] && label="on $branch" || label="no git repo"
+    triples+=( "$name" "$name" "$label" )
   done
-  (( $#names )) || return 1
+  (( $#triples )) || return 1
+  _dev_two_col PROJECT BRANCH "$triples[@]"
+}
 
-  for name in $names; do
-    branch=$(_dev_branch "$DEV_ROOT/$name")
-    if [[ -n $branch ]]; then
-      label="on $branch"
-    else
-      label="no git repo"
-    fi
-    displays+=("${(r:$width:)name}  │ $label")
-  done
-
-  compadd -Q -l -X "%F{81}%B${(r:$width:)hdr}  │ BRANCH%b%f" -d displays -a names
+# The options, styled like the project menu. The two long forms are listed;
+# the short forms and the -e/--explorer aliases still complete but stay off the
+# list (-n), so "-<Tab>" shows two clean rows without hiding any spelling.
+_dev_options() {
+  _dev_two_col OPTION DESCRIPTION \
+    --code "-c, --code" "open the project in VS Code" \
+    --open "-o, --open" "open in your file manager"
+  compadd -n -- -c -o -e --explorer
 }
 
 _dev() {
-  _arguments \
-    '(-c --code)'{-c,--code}'[open in VS Code]' \
-    '(-o --open -e --explorer)'{-o,--open,-e,--explorer}'[open in the file manager]' \
-    '1:project:_dev_projects'
+  # An option word completes options; otherwise the project (once), then, with a
+  # project already given, options -- matching dev()'s "options anywhere".
+  if [[ $words[CURRENT] == -* ]]; then
+    _dev_options
+    return
+  fi
+  local w
+  for w in ${words[2,CURRENT-1]}; do
+    [[ $w != -* ]] && { _dev_options; return }
+  done
+  _dev_projects
 }
 compdef _dev dev
 

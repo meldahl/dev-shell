@@ -316,8 +316,20 @@ if mode == "full":
           any("<History" in ln for ln in current()), current())
 send(b"\x07\x15", 0.6)
 
+# Option completion is styled like the project menu (OPTION │ DESCRIPTION), the
+# same _dev_two_col helper -- not compsys's "-- desc".
+raw, _ = send(b"dev api -\t", 1.6)
+optmenu = current()
+check("option completion shows an OPTION │ DESCRIPTION header (│, not --)",
+      any("OPTION" in ln and "│" in ln and "DESCRIPTION" in ln for ln in optmenu), optmenu)
+check("option rows show the option and its description",
+      any("--code" in ln for ln in optmenu) and any("VS Code" in ln for ln in optmenu), optmenu)
+send(b"\x07\x15", 0.6)
+
 check("dev-shell needs no plugin (the ListView render is dev-shell's own function)",
       query(b"$+functions[_dev_lv_render]") == "1", "")
+check("the two-column menu helper is shared (projects and options)",
+      query(b"$+functions[_dev_two_col]") == "1", "")
 
 raw, lines = send(b"cd /\r", 1.4)
 check("cd does not error", not any("no such file" in ln or "chpwd" in ln for ln in lines), lines)
