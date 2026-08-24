@@ -205,12 +205,14 @@ enabled stay in `plugins=(…)`; drop them there if you no longer want them.
 
 ## Tests
 
-`tests/run.sh` runs both suites and fails if either does: the zsh suite (bash,
-zsh, python3, `script`; pty-driven against sandboxed homes, with a small VT
-emulator rendering the terminal grid) and, from WSL, the PowerShell suite
-against pwsh 7 and Windows PowerShell 5.1 (skipped with a note where they are
-not reachable). Scratch directories are removed on success and kept, with their
-paths printed, on failure.
+`tests/run.sh` runs three suites and fails if any does: the **engine unit tests**
+(`tests/engine.test.zsh`, pure zsh — the history search, selection, and
+highlight offsets, no terminal); the **zsh suite** (bash, zsh, python3, `script`;
+pty-driven against sandboxed homes, with a small VT emulator rendering the
+terminal grid); and, from WSL, the **PowerShell suite** against pwsh 7 and
+Windows PowerShell 5.1 (skipped with a note where they are not reachable).
+Scratch directories are removed on success and kept, with their paths printed,
+on failure.
 
 ## Licence
 

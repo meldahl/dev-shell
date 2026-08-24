@@ -26,8 +26,8 @@ The global rules apply: end completed work with a clickable AskUserQuestion (ope
 |---|---|---|
 | A new `dev` option | the `for arg` parser (options bind before or after the project), the `_dev()` `_arguments` spec; PowerShell's `param()` with the same name | `zsh/dev-shell.zsh` `dev()` / `_dev()`, `powershell/dev-shell.ps1` |
 | Open something external | `_dev_open` — WSL → `explorer.exe`, macOS → `open`, else `xdg-open` | `zsh/dev-shell.zsh` |
-| A completion list with a header and aligned columns | `_dev_projects`: `compadd -Q -l -X header -d displays -a names`; width starts at the header's length. PowerShell: `name │ desc` rows padded past half the buffer so MenuComplete stays single-column | `zsh/dev-shell.zsh`, `powershell/dev-shell.ps1` |
-| The history list as you type | the ListView in the `DEV_SHELL_UX` branch: `_dev_lv_render` (POSTDISPLAY + region_highlight, on `line-pre-redraw`), `_dev_lv_compute`, `_dev_lv_down`/`_dev_lv_up` (nav, −1 = the typed line), `_dev_lv_escape` (dismiss/dispatch), `_dev_lv_finish` | `zsh/dev-shell.zsh` "Shell UX"; contract in [docs/history-list-behavior.md](docs/history-list-behavior.md) |
+| A completion list with a header and aligned columns | `_dev_two_col HEADER_L HEADER_R val label desc …` — one styled `compadd`; `_dev_projects` and `_dev_options` both use it. PowerShell: `name │ desc` rows padded past half the buffer so MenuComplete stays single-column | `zsh/dev-shell.zsh`, `powershell/dev-shell.ps1` |
+| The history list as you type | the three-layer ListView in the `DEV_SHELL_UX` branch: **engine** `_dev_hl_search`/`_dev_hl_move` (pure, unit-tested), **renderer** `_dev_hl_render` (POSTDISPLAY + region_highlight), **controller** `_dev_hl_hook` (the `line-pre-redraw` gate: edit vs keep vs hide by which widget fired) + `_dev_hl_down`/`_dev_hl_up`/`_dev_hl_escape`/`_dev_hl_tab` | `zsh/dev-shell.zsh` "Shell UX"; contract in [docs/history-list-behavior.md](docs/history-list-behavior.md) |
 | A new install-time setting | `current` / `quoted` / `ask` / `ask_yn` / `preview` and the `BLOCK` template, flags parsed in the top loop; PowerShell: `param()` plus the same marked block | `install.sh`, `install.ps1` |
 | A new oh-my-zsh plugin | `clone_plugin` + `enable_plugin` (prepends; the last one enabled ends first) | `install.sh` |
 | A test of an installer | headless: `"$INST" --flag </dev/null`; prompted: `pty()` through `script`; PowerShell: `run()` with the `$PROFILE` override and the probe copy | `tests/install-sh.test.sh`, `tests/install-ps1.test.sh` |
@@ -51,7 +51,7 @@ The global rules apply: end completed work with a clickable AskUserQuestion (ope
 
 ## Verification standard
 
-`/verify`: syntax for every language (`bash -n`, `zsh -n`, the PowerShell parser, `py_compile`) → `shellcheck -S warning install.sh tests/*.sh` → `bash tests/run.sh` (zsh suite, then the PowerShell suite from WSL), judged by each suite's `RESULT` line and `run.sh`'s exit status. The PostToolUse hook `.claude/hooks/lint-changed.sh` runs the per-file checks on every edit.
+`/verify`: syntax for every language (`bash -n`, `zsh -n`, the PowerShell parser, `py_compile`) → `shellcheck -S warning install.sh tests/*.sh` → `bash tests/run.sh`, which runs the **engine unit tests** (`tests/engine.test.zsh`, pure zsh — the history engine + renderer offsets), the **zsh suite** (installer + the controller via the pty probe), then the **PowerShell suite** from WSL; judged by each `RESULT` line and `run.sh`'s exit status. The PostToolUse hook `.claude/hooks/lint-changed.sh` runs the per-file checks on every edit.
 
 ## Docs, plan, memory
 

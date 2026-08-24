@@ -62,18 +62,17 @@ Everything else — the rows, the live `<i/N>` header that tracks the selection,
 
 ## How it is built
 
-All in the `DEV_SHELL_UX` branch of `zsh/dev-shell.zsh`, under "History list as you type":
+Three layers in `zsh/dev-shell.zsh`, so each stays simple and testable:
 
-- **Rendering** is `POSTDISPLAY` (the text zsh shows after the buffer): `_dev_lv_render`, hooked on `line-pre-redraw` via `add-zle-hook-widget`, builds `\n<heading>\n> row…` and colours it with `region_highlight` entries (tagged `memo=devlv` so they are cleared cleanly). Offsets index the combined buffer + POSTDISPLAY.
-- **Matching** is `_dev_lv_compute`: `${(k)history[(R)(#i)*query*]}` newest-first via `(On)`, split into prefix and substring hits, capped at ten. `${(V)…}` visualises control characters.
-- **State**: `_dev_lv_sel` (−1 = the typed line), `_dev_lv_orig`/`_dev_lv_ocur` (the typed line and its cursor), `_dev_lv_expect` (the buffer a nav widget set, to tell navigation from a real edit), `_dev_lv_matches`.
-- **Navigation**: `_dev_lv_down` / `_dev_lv_up` move `_dev_lv_sel`, copy the entry onto the line, and wrap through −1. `_dev_lv_render` runs only after an editing or navigation widget (a `_DEV_LV_KEEP` allow-list), so the project menu and the list never draw at once.
-- **Enter** is plain `accept-line`; a `line-finish` hook clears the list. **Esc** is `_dev_lv_escape`: it peeks for a following byte (an arrow or other sequence, which it dispatches) versus a lone Esc (which dismisses) — avoiding the `KEYTIMEOUT` lag a bare `^[` binding adds to every arrow.
-- **zsh-autosuggestions** is suppressed while the list is on (`_ZSH_AUTOSUGGEST_DISABLED=1` when its functions are present), so its async ghost cannot clobber `POSTDISPLAY`.
+- **Engine** (`_dev_hl_search`, `_dev_hl_move`) — pure logic over the history and the selection state (`_dev_hl_matches`, `_dev_hl_sel` where −1 is the typed line, `_dev_hl_top` for the scroll window). `_dev_hl_search` does the substring/prefix/newest-first/dedup match capped at `_DEV_HL_MAX`; `_dev_hl_move` walks the selection through the virtual list `[query, match0…]` with wrapping and scrolls the window. No terminal needed — unit-tested in plain zsh.
+- **Renderer** (`_dev_hl_render`) — a pure function of that state: builds `POSTDISPLAY` (the `<i/N>…<History(i/N)>` heading, right-spread, and the visible window of `> row`s) and the `region_highlight` entries (marker and heading grey, match and selected row in the accent). Offsets index the combined buffer + POSTDISPLAY. It clears its own highlights by **offset** — everything at or past the buffer length — because ZLE 5.8 strips the `memo` tag that would otherwise mark them; this is what stopped the earlier "random colouring" from stale entries piling up.
+- **Controller** — the ZLE widgets and the `line-pre-redraw` hook (`_dev_hl_hook`). The hook decides **from which widget just fired**, never by comparing the buffer: an editing widget re-searches from the buffer (query reset), the list's own navigation and cursor moves just redraw, and completion/accept/history hide the list. `_dev_hl_down`/`_dev_hl_up` move the selection and copy it onto the line (restoring the typed line at −1); `_dev_hl_escape` peeks the byte after Esc to dispatch an arrow versus dismiss on a lone Esc; `_dev_hl_tab` suspends the list (until the next edit) so the project menu owns the screen. zsh-autosuggestions' ghost is suppressed while the list is on (`_ZSH_AUTOSUGGEST_DISABLED`, checked by existence).
+
+This split is what makes the widget-gated recompute possible — the old plugin-based version compared the buffer to guess "did the user edit?", which raced with nav-set buffers and corrupted the selection.
 
 ## Enforcing checks
 
-`tests/zsh-ux.probe.py`, driven by `tests/install-sh.test.sh` B14 (`full`, keys on) and B15 (`nokeys`). It drives an interactive zsh through a pty and renders the real terminal grid with a small VT emulator, so overlapping redraws resolve to the final screen. Named checks:
+The **engine and renderer** are unit-tested in plain zsh by `tests/engine.test.zsh` (search order, dedup, the query-length cut, selection wrap, the highlight offsets landing on the right text, the scroll window) — no terminal, so the core is provably solid. The **controller** is checked live by `tests/zsh-ux.probe.py`, driven by `tests/install-sh.test.sh` B14 (`full`, keys on) and B15 (`nokeys`). It drives an interactive zsh through a pty and renders the real terminal grid with a small VT emulator, so overlapping redraws resolve to the final screen. Named checks:
 
 | Ruling | Check |
 |---|---|
