@@ -7,17 +7,16 @@
 #
 # Writes a dev-shell block to ~/.zshrc -- re-running replaces it, so this is
 # also how you change the settings later; every question defaults to the
-# current setting -- and, when oh-my-zsh is present, installs the plugins:
-# zsh-autocomplete (the history list as you type) and zsh-autosuggestions, or
-# history-substring-search in place of zsh-autocomplete when the styling is
-# off. Without a terminal to ask on (curl | bash, CI, a dotfiles script) the
-# path must be given, via --dev-root or DEV_ROOT in the environment, unless a
-# block already has it; the look keeps its current values. Anything given here
-# is not asked for:
+# current setting -- and, when oh-my-zsh is present, installs the optional
+# zsh-autosuggestions plugin (ghost text; the history list itself needs no
+# plugin). Without a terminal to ask on (curl | bash, CI, a dotfiles script)
+# the path must be given, via --dev-root or DEV_ROOT in the environment, unless
+# a block already has it; the look keeps its current values. Anything given
+# here is not asked for:
 #
 #   --dev-root DIR        projects directory
-#   --ux on|off           completion styling (menu, colours, suggestions, history list)
-#   --keys on|off         Up/Down history keys (the list and menu, or substring search)
+#   --ux on|off           the menu styling and the history list as you type
+#   --keys on|off         bind Up/Down/Esc to the history list (else zsh defaults)
 #   --accent N            256-colour index for the selected item
 #   --continuation STR    continuation prompt (PS2)
 #   --uninstall           remove the block again (backup first)
@@ -145,7 +144,7 @@ ask_yn() { # $1 prompt, $2 default (1|0) -> YN
 # settings, on sample projects, so the choice can be made by eye.
 preview() { # $1 ux (1|0), $2 accent, $3 continuation
   local off=$'\033[0m' hdr=$'\033[1;38;5;81m' sel=$'\033[1;38;5;'"$2"'m' ghost=$'\033[38;5;244m'
-  local dim=$'\033[2m' match=$'\033[30;103m'   # zsh-autocomplete's own row number and match colours
+  local meta=$'\033[38;5;244m'
   if [ "$1" != 1 ]; then
     echo
     echo "  (styling off: plain completion list, no colours, no suggestions, no history list)"
@@ -163,9 +162,10 @@ preview() { # $1 ux (1|0), $2 accent, $3 continuation
   echo "  ${sel}website        │ on feat/dark-mode${off}          <- selected row, in the accent"
   echo "  notes          │ no git repo"
   echo
-  echo "  % dev web${ghost}site -c${off}                          <- suggestion from history"
-  echo "  ${dim} 2680  ${off}dev ${match}web${off}site -c                      <- matching history as you type"
-  echo "  ${sel} 2655  dev website -o${off}                        <- Down/Up picks a row, Enter runs it"
+  echo "  % dev web${ghost}site -c${off}                          <- ghost text from history"
+  echo "  ${meta}<-/2>  <History(-/2)>${off}                       <- the history list as you type"
+  echo "  ${meta}>${off} dev ${sel}web${off}site -c                          matched text in the accent"
+  echo "  ${meta}>${off} dev website -o                          <- Down/Up selects a row (accent), Enter runs it"
   echo "  % echo \"multi"
   echo "  ${3//\%_/dquote}line\"                                 <- continuation prompt"
   echo
@@ -221,7 +221,7 @@ if (( interactive && ! look_given )); then
           echo "  please give a number 0-255"
         done
       fi
-      ask_yn "Up/Down history keys (the history list, or search by what is typed)?" "$keys"; keys=$YN
+      ask_yn "Bind Up/Down/Esc to the history list?" "$keys"; keys=$YN
       echo "With those settings:"
       preview "$ux" "$accent" "$cont"
       ask_yn "Keep these?" 1
@@ -265,43 +265,36 @@ else
   echo "added dev-shell block to $ZSHRC"
 fi
 
-# oh-my-zsh plugins: the history list as you type (zsh-autocomplete) and
-# ghost-text suggestions (zsh-autosuggestions). zsh-autocomplete changes how
-# the line behaves, not only how it looks, so it follows the styling switch;
-# with the styling off, history-substring-search gives Up/Down instead. Each
-# plugin is prepended, so the last one enabled ends up first.
+# The history list, menu and keys are all in the module -- no plugin. The one
+# optional extra is zsh-autosuggestions (grey ghost text), cloned and enabled
+# here when oh-my-zsh is present.
 OMZ="${ZSH:-$HOME/.oh-my-zsh}"
-clone_plugin() { # $1 name, $2 repository
-  [ -d "$OMZ/custom/plugins/$1" ] && return
-  echo "installing $1..."
-  git clone --depth=1 -q "$2" "$OMZ/custom/plugins/$1"
-}
-enable_plugin() { # $1 name
-  grep -qE "^plugins=.*[( ]$1[ )]" "$ZSHRC" && return
-  sed -i -E "s/^(plugins=\()/\1$1 /" "$ZSHRC"
-  echo "enabled plugin: $1"
-}
 if [ -d "$OMZ" ]; then
-  if (( ux )); then
-    plugins="zsh-autosuggestions zsh-autocomplete"
-  else
-    plugins="history-substring-search zsh-autosuggestions"
+  SUGG="$OMZ/custom/plugins/zsh-autosuggestions"
+  if [ ! -d "$SUGG" ]; then
+    echo "installing zsh-autosuggestions..."
+    git clone --depth=1 -q https://github.com/zsh-users/zsh-autosuggestions "$SUGG"
   fi
-  for p in $plugins; do
-    case $p in
-      zsh-autosuggestions) clone_plugin "$p" https://github.com/zsh-users/zsh-autosuggestions ;;
-      zsh-autocomplete)    clone_plugin "$p" https://github.com/marlonrichert/zsh-autocomplete ;;
-    esac
-    enable_plugin "$p"
-  done
+  if ! grep -qE "^plugins=.*[( ]zsh-autosuggestions[ )]" "$ZSHRC"; then
+    sed -i -E "s/^(plugins=\()/\1zsh-autosuggestions /" "$ZSHRC"
+    echo "enabled plugin: zsh-autosuggestions"
+  fi
 else
-  echo "note: oh-my-zsh not found -- install zsh-autocomplete (the history list) and"
-  echo "      zsh-autosuggestions yourself; dev-shell configures them when they are loaded."
+  echo "note: oh-my-zsh not found -- for ghost-text suggestions install"
+  echo "      zsh-autosuggestions and source it before dev-shell; the history"
+  echo "      list itself needs no plugin."
 fi
 
 if ! zsh -n "$ZSHRC"; then
   echo "error: $ZSHRC has a syntax error; restore from the backup above" >&2
   exit 1
+fi
+
+# dev-shell draws the history list itself; zsh-autocomplete draws its own and
+# would fight it, so flag it if it is still enabled.
+if grep -qE "^plugins=.*[( ]zsh-autocomplete[ )]" "$ZSHRC"; then
+  echo "note: zsh-autocomplete is in plugins=(...); it draws its own history list"
+  echo "      and now conflicts with dev-shell's -- remove it from plugins=(...)."
 fi
 
 echo "done -- dev will use $DEV_ROOT. Open a new zsh session, or run: source $ZSHRC"

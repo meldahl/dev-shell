@@ -5,18 +5,17 @@
 #
 # Optional configuration, set BEFORE sourcing:
 #   DEV_ROOT                directory holding your projects  (default: $HOME/dev)
-#   DEV_SHELL_UX            0 to skip the completion styling and the history list
+#   DEV_SHELL_UX            0 to skip the menu styling and the history list
 #                           (keeps just the command)
-#   DEV_SHELL_KEYS          0 to skip the Up/Down history keybindings
+#   DEV_SHELL_KEYS          0 to leave Up/Down/Esc at their zsh defaults
 #   DEV_SHELL_ACCENT        256-colour index for the selected item  (default: 214)
 #   DEV_SHELL_CONTINUATION  continuation prompt, i.e. PS2  (default: "%_❯❯ " -- %_ names
 #                           the open construct, e.g. dquote, as zsh's own default does)
 #
-# Source it AFTER your plugins. The history list as you type needs
-# zsh-autocomplete (marlonrichert), ghost-text suggestions need
-# zsh-autosuggestions; without zsh-autocomplete, Up/Down fall back to
-# history-substring-search when that is loaded. Everything is guarded, so a
-# missing plugin only means the feature is absent.
+# The history list as you type is drawn here with no plugin. Ghost-text
+# suggestions are a separate, optional extra: the zsh-autosuggestions plugin,
+# sourced before this file. Everything is guarded, so a missing plugin only
+# means the ghost text is absent.
 
 : ${DEV_ROOT:=$HOME/dev}
 export DEV_ROOT
@@ -167,217 +166,186 @@ _dev() {
 compdef _dev dev
 
 # --- Shell UX ---------------------------------------------------------------
-# zsh-autocomplete registers the ~autocomplete named directory when it loads
-# (its README uses it as the plugin's handle), so that is the detection.
-_dev_has_autocomplete() { (( ${+nameddirs[autocomplete]} )) }
-
 if [[ ${DEV_SHELL_UX:-1} == 1 ]]; then
-  # Label each completion group so the list has a heading.
+  zmodload -i zsh/complist
+  autoload -Uz add-zle-hook-widget
+
+  # Tab opens the project menu: compsys menu selection with the selected row
+  # recoloured in the accent rather than boxed (a filled box abuts the next
+  # column). 'ma' is the menu-selection colour.
+  zstyle ':completion:*' menu select
   zstyle ':completion:*' group-name ''
   zstyle ':completion:*:descriptions' format '%F{81}%B%d%b%f'
-
-  # 'ma' recolours the selected entry instead of filling a background box,
-  # which would otherwise run into the next column. The accent (amber by
-  # default) keeps it clear of the cyan header and the default light-blue text.
-  zmodload -i zsh/complist
   zstyle ':completion:*' list-colors "${(s.:.)LS_COLORS}" "ma=1;38;5;${DEV_SHELL_ACCENT:-214}"
-
-  if _dev_has_autocomplete; then
-    # History list as you type, PSReadLine's ListView: every line starts in
-    # history mode, 10 rows, from the first character, no duplicates
-    # (hist_find_no_dups is the switch the plugin honours), no ';' appended to
-    # a picked line. Ctrl-R switches the line to live completions instead.
-    zstyle ':autocomplete:*' default-context history-incremental-search-backward
-    zstyle ':autocomplete:history-incremental-search-backward:*' list-lines 10
-    zstyle ':autocomplete:*' min-input 1
-    zstyle ':autocomplete:*' add-semicolon no
-    setopt hist_find_no_dups
-
-    # The list itself comes from the plugin's history completer, which fixes
-    # its own look and matching: event numbers, black-on-yellow matches, a
-    # fuzzy query, no heading. dev-shell owns that function instead -- forked
-    # from zsh-autocomplete 027cdab (Completions/_autocomplete__history_lines)
-    # and reshaped to PSReadLine's ListView: "> line ... [History]" rows under
-    # a "<-/N>   <History(N)>" heading, the input matched as a substring with
-    # prefix matches first, newest first, no duplicates, no multi-line
-    # commands, match and selected row in the accent. Up from the first row
-    # returns to the typed line (PSReadLine's virtual item) -- done at the
-    # menuselect layer below, not as a listed match. zsh can only replace the
-    # word at the cursor, so the words around it stay as typed (lbuffer/
-    # rbuffer below). Defined at the first precmd, after the
-    # plugin's compinit has declared the original for autoloading; re-check
-    # when the plugin updates.
-    _dev_define_history_lines() {
-      add-zsh-hook -d precmd _dev_define_history_lines
-      _autocomplete__history_lines() {
-        setopt localoptions multibyte extendedglob
-        (( _matcher_num > 1 )) && return 1
-
-        local -a before=( "${(@b)words[1,CURRENT-1]}" ) after=( "${(@b)words[CURRENT+1,-1]}" )
-        local lbuffer='' rbuffer='' input=$words[CURRENT]
-        (( $#before )) && lbuffer="${(j.[[:blank:]]##.)before}[[:blank:]]##"
-        (( $#after ))  && rbuffer="[[:blank:]]##${(j.[[:blank:]]##.)after}"
-        lbuffer="$lbuffer${(b)QIPREFIX}"; rbuffer="${(b)QISUFFIX}$rbuffer"
-        local pat="${lbuffer}*${rbuffer}"
-        [[ -n $input ]] && pat="${lbuffer}(#i)*${(b)input}*${rbuffer}"
-
-        local -i incremental=0 max=10
-        [[ $curcontext == *-incremental-* ]] && incremental=1
-        if (( incremental )); then
-          zstyle -s ':autocomplete:history-incremental-search-backward:' list-lines max || max=10
-        else
-          zle -R 'Loading...'
-          zstyle -s ":autocomplete:${curcontext}:" list-lines max || (( max = LINES / 2 ))
-        fi
-
-        # Newest first; prefix matches rank before the rest (PSReadLine).
-        local -a nums=( ${(On)${(k)history[(R)${~pat}]}} ) prefixed others plines olines
-        local -A seen
-        local n cmd segment
-        for n in $nums; do
-          cmd=$history[$n]
-          [[ $cmd == *$'\n'* ]] && continue
-          segment=${${cmd##$~lbuffer}%%$~rbuffer}
-          [[ -n $input && $segment == (#i)${(b)input} ]] && continue
-          (( $+seen[$segment] )) && continue
-          seen[$segment]=1
-          if [[ -n $input && $segment == (#i)${(b)input}* ]]; then
-            prefixed+=( "$segment" ); plines+=( "$cmd" )
-            (( $#prefixed >= max )) && break
-          else
-            others+=( "$segment" ); olines+=( "$cmd" )
-          fi
-        done
-        # Slice under quotes with (@) yields one empty word on an empty array,
-        # so guard each append on a non-empty source.
-        local -a matches=() lines=()
-        (( $#prefixed )) && matches=( "${(@)prefixed[1,max]}" ) lines=( "${(@)plines[1,max]}" )
-        local -i room=$(( max - $#matches ))
-        (( room > 0 && $#others )) && matches+=( "${(@)others[1,room]}" ) lines+=( "${(@)olines[1,room]}" )
-        (( $#matches )) || return 1
-
-        # Rows: "> text", the text cut with an ellipsis, "[History]" flush
-        # right. (V) makes control characters printable (an ESC becomes ^[),
-        # so a history line that carries raw colour codes cannot repaint the
-        # list; the match array keeps the real line, so it still runs.
-        local tag='[History]' text
-        local -i width=$(( COLUMNS - 1 )) textw=0
-        (( textw = width - 3 - $#tag ))
-        local -a displays
-        for text in "${(@)lines}"; do
-          text=${(V)text}
-          (( $#text > textw )) && text="${text[1,textw-1]}…"
-          displays+=( "> ${text}${(l:textw-$#text:: :):-} ${tag}" )
-        done
-
-        # Colours: the marker and the tag in the metadata grey, the first
-        # occurrence of the input in the accent, the selected row in the
-        # accent (unprefixed ma=, which a tagged group's _setup never yields).
-        local accent="1;38;5;${DEV_SHELL_ACCENT:-214}" meta='38;5;244' w=${(b)input}
-        _comp_colors=( "=(#b)(> )*( \[History\])=0=${meta}=${meta}" "ma=${accent}" )
-        if [[ -n $input && $input != *[:=]* ]]; then
-          _comp_colors=( "=(#b)(> )((^*(#i)${w}*))((#i)${w})(*)( \[History\])=0=${meta}=0=${accent}=0=${meta}" "$_comp_colors[@]" )
-        fi
-
-        # The heading counts the real matches. It is drawn once, so it cannot
-        # track the selection the way PSReadLine's live <i/N> does.
-        local -i n=$#matches
-        local head="<-/${n}>" src="<History(${n})>"
-        local esc=$'\e'
-        local heading="%{${esc}[${meta};3m%}${head}${(l:width-$#head-$#src:: :):-}${src}%{${esc}[0m%}"
-
-        # The typed line as a last, dim row with no tag: menu selection wraps
-        # first<->last, so Up from the first match lands here and restores it,
-        # PSReadLine's virtual original item. Only with something typed -- an
-        # empty query (the Up history menu on a blank line) has nothing to
-        # return to.
-        if [[ -n $input ]]; then
-          matches+=( "$input" ); text=${(V)input}
-          (( $#text > textw )) && text="${text[1,textw-1]}…"
-          displays+=( "> ${text}" )
-        fi
-
-        local -a expl
-        _description -2V history-lines expl ''
-        builtin compadd -QU -S '' -X "$heading" -ld displays "$expl[@]" -a matches
-      }
-    }
-    autoload -Uz add-zsh-hook
-    add-zsh-hook precmd _dev_define_history_lines
-
-    # The plugin records recent directories (cdr) under
-    # ${XDG_DATA_HOME:-~/.local/share}/zsh but never creates that directory, so
-    # every cd would complain; create it unless cdr was pointed elsewhere.
-    zstyle -m ':chpwd:' recent-dirs-file '*' || mkdir -p -- "${XDG_DATA_HOME:-$HOME/.local/share}/zsh"
-
-    # Enter inside a menu. menuselect cannot hand Enter to a widget of ours (it
-    # leaves the menu and re-dispatches the key), so the widget that opens a
-    # menu decides: a history list runs the line, as PSReadLine does
-    # (.accept-line, re-dispatched); a completion menu only accepts the entry
-    # (accept-line's menuselect meaning). The list a line shows is history
-    # unless Ctrl-R toggled it, which the plugin records in curcontext.
-    _dev_menu_enter() { # run | accept
-      local widget=accept-line
-      [[ $1 == run ]] && widget=.accept-line
-      bindkey -M menuselect '^M' $widget
-    }
-    _dev_list_is_history() { [[ $curcontext == history-incremental-search* ]] }
-    _dev_menu_enter accept
-    # Esc leaves a list and restores the line, as PSReadLine's Esc dismisses
-    # its list. Arrow sequences still reach the menu: they arrive whole.
-    bindkey -M menuselect '^[' send-break
-
-    # Tab still opens the project menu. The plugin would menu-select whatever
-    # list is already on screen -- the history list -- so list the plain
-    # completions first (curcontext is compsys's context variable; empty means
-    # the widget's own) and menu-select those.
-    _dev_menu_complete() {
-      _dev_menu_enter accept
-      local curcontext=
-      zle list-choices
-      zle menu-select -w
-    }
-    zle -N _dev_menu_complete
-    bindkey '^I' _dev_menu_complete
-
-    # Down enters the list on screen, Up opens the history menu.
-    _dev_list_select() {
-      if _dev_list_is_history; then _dev_menu_enter run; else _dev_menu_enter accept; fi
-      zle down-line-or-select -w
-    }
-    _dev_history_menu() {
-      _dev_menu_enter run
-      zle up-line-or-search -w
-    }
-    zle -N _dev_list_select
-    zle -N _dev_history_menu
-  else
-    # Arrow-navigable menu on Tab.
-    zstyle ':completion:*' menu select
-  fi
 
   # Continuation prompt, matching the PowerShell side; %_ keeps zsh's hint of
   # which construct is still open (dquote, then, ...), which PS2 shows by default.
   PS2=${DEV_SHELL_CONTINUATION-'%_❯❯ '}
 
-  # Ghost-text suggestions from history (requires the zsh-autosuggestions
-  # plugin; harmless if it is not installed).
-  ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=244'
+  # The history list is the prediction display, PowerShell's ListView -- its top
+  # row is the suggestion. zsh-autosuggestions' inline ghost would fight it for
+  # POSTDISPLAY, so turn the ghost off while the list is on (the plugin can stay
+  # loaded for DEV_SHELL_UX=0, where the ghost works and there is no list).
+  (( $+functions[_zsh_autosuggest_fetch] )) && typeset -g _ZSH_AUTOSUGGEST_DISABLED=1
+
+  # --- History list as you type: PowerShell's PSReadLine ListView -----------
+  # Matching history is drawn below the input in POSTDISPLAY -- up to ten
+  # "> line" rows under a live "<i/N>  <History(i/N)>" heading -- and coloured
+  # with region_highlight: the marker and heading grey, the matched text and
+  # the selected row in the accent. Down/Up move the selection and copy it onto
+  # the line; index -1 is the line you typed, so Up from the first row restores
+  # it and its cursor, PowerShell's original item, with no extra row. Enter
+  # runs the line; Esc or an edit dismisses it. The list is matched as a
+  # case-insensitive substring, prefix matches first, newest first, no
+  # duplicates or multi-line commands; (V) makes control characters printable
+  # so a history line's own escapes cannot repaint the list. It is all drawn
+  # and driven here -- no plugin -- so the header tracks the selection exactly
+  # and nothing is faked. zsh-autosuggestions (ghost text) still layers on top.
+  typeset -g  _dev_lv_orig='' _dev_lv_expect=$'\0'
+  typeset -gi _dev_lv_sel=-1 _dev_lv_ocur=0
+  typeset -ga _dev_lv_matches=()
+  typeset -gi _DEV_LV_MAX=10
+  typeset -g  _dev_lv_accent="fg=${DEV_SHELL_ACCENT:-214},bold" _dev_lv_meta='fg=244'
+
+  # Widgets after which the list stays: typing, its edits, and the list's own
+  # navigation. Anything else (completion, accept, history recall) hides it, so
+  # the project menu and the list never draw at once.
+  typeset -ga _DEV_LV_KEEP=(
+    self-insert backward-delete-char delete-char delete-char-or-list
+    backward-kill-word kill-word backward-kill-line kill-line kill-whole-line
+    yank yank-pop bracketed-paste forward-char backward-char
+    beginning-of-line end-of-line _dev_lv_down _dev_lv_up
+  )
+
+  _dev_lv_hide() {
+    _dev_lv_matches=(); POSTDISPLAY=''
+    region_highlight=( "${(@)region_highlight:#*memo=devlv*}" )
+  }
+
+  _dev_lv_compute() {
+    setopt localoptions extendedglob
+    _dev_lv_matches=()
+    local q=$BUFFER
+    [[ -z $q ]] && return
+    local -a nums=( ${(On)${(k)history[(R)(#i)*${(b)q}*]}} )
+    local -A seen; local n cmd; local -a pre=() rest=()
+    for n in $nums; do
+      cmd=$history[$n]
+      [[ $cmd == *$'\n'* ]] && continue
+      (( ${#cmd} <= ${#q} )) && continue     # nothing to add over what is typed
+      (( $+seen[$cmd] )) && continue
+      seen[$cmd]=1
+      if [[ $cmd == (#i)${(b)q}* ]]; then pre+=( "$cmd" ); else rest+=( "$cmd" ); fi
+      (( $#pre >= _DEV_LV_MAX && $#rest >= _DEV_LV_MAX )) && break
+    done
+    _dev_lv_matches=( "${(@)pre}" "${(@)rest}" )
+    (( $#_dev_lv_matches > _DEV_LV_MAX )) && _dev_lv_matches=( "${(@)_dev_lv_matches[1,_DEV_LV_MAX]}" )
+  }
+
+  _dev_lv_render() {
+    setopt localoptions extendedglob
+    # Draw only after an edit or the list's own navigation.
+    if [[ -n $LASTWIDGET ]] && (( ! ${_DEV_LV_KEEP[(Ie)${LASTWIDGET#.}]} )); then
+      _dev_lv_hide; return
+    fi
+    if [[ $BUFFER != $_dev_lv_expect ]]; then     # a real edit
+      _dev_lv_sel=-1; _dev_lv_orig=$BUFFER; _dev_lv_ocur=$CURSOR
+      _dev_lv_expect=$BUFFER; _dev_lv_compute
+    fi
+    region_highlight=( "${(@)region_highlight:#*memo=devlv*}" )
+    if (( ! $#_dev_lv_matches )); then POSTDISPLAY=''; return; fi
+
+    local -i n=$#_dev_lv_matches
+    local sel='-'; (( _dev_lv_sel >= 0 )) && sel=$(( _dev_lv_sel + 1 ))
+    local head="<${sel}/${n}>  <History(${sel}/${n})>"
+    local body=$'\n'$head
+    local -i off=$(( $#BUFFER + 1 ))              # past the leading newline
+    region_highlight+=( "$off $(( off + $#head )) ${_dev_lv_meta},memo=devlv" )
+    (( off += $#head ))
+
+    local q=${(V)_dev_lv_expect} row
+    local -i i tstart tend qi
+    for (( i = 1; i <= n; i++ )); do
+      row=${(V)_dev_lv_matches[i]}
+      (( ${#row} > COLUMNS - 3 )) && row="${row[1,COLUMNS-4]}…"
+      body+=$'\n'"> $row"
+      (( off += 1 ))                              # the newline
+      region_highlight+=( "$off $(( off + 2 )) ${_dev_lv_meta},memo=devlv" )   # "> "
+      (( off += 2 ))
+      tstart=$off; tend=$(( off + ${#row} ))
+      if (( i - 1 == _dev_lv_sel )); then
+        region_highlight+=( "$tstart $tend ${_dev_lv_accent},memo=devlv" )
+      elif [[ -n $q ]]; then
+        qi=${row[(i)(#i)${(b)q}]}
+        (( qi <= ${#row} )) &&
+            region_highlight+=( "$(( tstart + qi - 1 )) $(( tstart + qi - 1 + ${#q} )) ${_dev_lv_accent},memo=devlv" )
+      fi
+      (( off = tend ))
+    done
+    POSTDISPLAY=$body
+  }
+
+  _dev_lv_down() {
+    (( $#_dev_lv_matches )) || { zle .down-line-or-history; return }
+    if (( _dev_lv_sel < $#_dev_lv_matches - 1 )); then
+      (( _dev_lv_sel++ )); BUFFER=$_dev_lv_matches[_dev_lv_sel+1]; CURSOR=$#BUFFER
+    else
+      _dev_lv_sel=-1; BUFFER=$_dev_lv_orig; CURSOR=$_dev_lv_ocur
+    fi
+    _dev_lv_expect=$BUFFER
+  }
+  _dev_lv_up() {
+    (( $#_dev_lv_matches )) || { zle .up-line-or-history; return }
+    if (( _dev_lv_sel == 0 )); then
+      _dev_lv_sel=-1; BUFFER=$_dev_lv_orig; CURSOR=$_dev_lv_ocur
+    elif (( _dev_lv_sel > 0 )); then
+      (( _dev_lv_sel-- )); BUFFER=$_dev_lv_matches[_dev_lv_sel+1]; CURSOR=$#BUFFER
+    else
+      _dev_lv_sel=$(( $#_dev_lv_matches - 1 )); BUFFER=$_dev_lv_matches[_dev_lv_sel+1]; CURSOR=$#BUFFER
+    fi
+    _dev_lv_expect=$BUFFER
+  }
+  _dev_lv_dismiss() {   # restore the typed line and hide the list
+    if (( $#_dev_lv_matches )) && (( _dev_lv_sel != -1 )); then
+      BUFFER=$_dev_lv_orig; CURSOR=$_dev_lv_ocur; _dev_lv_expect=$BUFFER
+    fi
+    _dev_lv_sel=-1; _dev_lv_hide
+  }
+  _dev_lv_finish() { _dev_lv_sel=-1; _dev_lv_expect=$'\0'; _dev_lv_hide }
+
+  # Esc dismisses the list -- but arrows and other keys arrive as ESC-prefixed
+  # sequences, so peek: a byte right after ESC means a sequence, which we
+  # dispatch (arrows to the list, the rest to the matching line-editor widget);
+  # a lone ESC dismisses. This keeps Esc instant without the KEYTIMEOUT wait a
+  # bare ^[ binding would add to every arrow.
+  _dev_lv_escape() {
+    local c1 c2
+    if read -k -t 0.03 c1; then
+      if [[ $c1 == ('['|O) ]] && read -k -t 0.03 c2; then
+        case $c2 in
+          (A) zle _dev_lv_up;       return ;;
+          (B) zle _dev_lv_down;     return ;;
+          (C) zle .forward-char;    return ;;
+          (D) zle .backward-char;   return ;;
+          (H) zle .beginning-of-line; return ;;
+          (F) zle .end-of-line;     return ;;
+        esac
+      fi
+      return   # an ESC sequence we do not handle: swallow it, keep the list
+    fi
+    _dev_lv_dismiss
+  }
+
+  zle -N _dev_lv_down; zle -N _dev_lv_up; zle -N _dev_lv_escape
+  add-zle-hook-widget line-pre-redraw _dev_lv_render
+  add-zle-hook-widget line-finish _dev_lv_finish
 fi
 
-# Up/Down: the history menu and the list with zsh-autocomplete, otherwise
-# search history by what is already typed (history-substring-search). Both the
-# normal and the application-mode sequences are bound, so plugin order cannot
-# decide who wins.
-if [[ ${DEV_SHELL_KEYS:-1} == 1 ]]; then
-  if _dev_has_autocomplete && [[ ${DEV_SHELL_UX:-1} == 1 ]]; then
-    bindkey '^[[A' _dev_history_menu '^[OA' _dev_history_menu
-    bindkey '^[[B' _dev_list_select  '^[OB' _dev_list_select
-  elif _dev_has_autocomplete; then
-    bindkey '^[[A' up-line-or-search   '^[OA' up-line-or-search
-    bindkey '^[[B' down-line-or-select '^[OB' down-line-or-select
-  elif (( $+functions[history-substring-search-up] )); then
-    bindkey '^[[A' history-substring-search-up   '^[OA' history-substring-search-up
-    bindkey '^[[B' history-substring-search-down '^[OB' history-substring-search-down
-  fi
+# Up/Down drive the history list and Esc dismisses it; both the normal and the
+# application-mode arrow sequences are bound. DEV_SHELL_KEYS=0 leaves the keys
+# at their zsh defaults (the list still shows, as a passive preview).
+if [[ ${DEV_SHELL_UX:-1} == 1 && ${DEV_SHELL_KEYS:-1} == 1 ]]; then
+  bindkey '^[[A' _dev_lv_up   '^[OA' _dev_lv_up
+  bindkey '^[[B' _dev_lv_down '^[OB' _dev_lv_down
+  bindkey '^[' _dev_lv_escape
 fi
